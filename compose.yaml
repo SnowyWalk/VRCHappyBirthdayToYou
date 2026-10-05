@@ -1,0 +1,20 @@
+services:
+  birthday-world:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL to your public HTTPS origin in .env}
+      STORAGE_DIR: /app/storage
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    volumes:
+      - birthday-data:/app/storage
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  birthday-data:

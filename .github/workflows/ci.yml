@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PUBLIC_BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build production Docker image
+        run: docker compose build
+      - name: Start Docker app
+        run: |
+          docker compose up -d --wait --wait-timeout 120
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --tail=200
+      - name: Stop containers
+        if: always()
+        run: docker compose down

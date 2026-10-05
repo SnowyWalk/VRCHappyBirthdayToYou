@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.env*
+storage
+artifacts
+test-results
+playwright-report
+tests
+*.tsbuildinfo
+.omx
+.codex
+backups
+storage-import
+*.pem
+*.key

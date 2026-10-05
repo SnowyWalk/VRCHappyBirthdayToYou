@@ -1,0 +1,14 @@
+# Use this override when Nginx Proxy Manager is another Docker container.
+# docker compose -f compose.yaml -f compose.npm.yaml up -d --build
+services:
+  birthday-world:
+    networks:
+      default:
+      npm:
+        aliases:
+          - birthday-world
+
+networks:
+  npm:
+    external: true
+    name: ${NPM_NETWORK:?Set NPM_NETWORK to the existing Nginx Proxy Manager Docker network}
