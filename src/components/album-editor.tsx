@@ -8,6 +8,7 @@ import {
   Save,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Brand } from "@/components/brand";
@@ -19,12 +20,14 @@ import {
   copyText,
   readResponse,
   rememberAlbum,
+  deleteSavedAlbum,
   recalledToken,
   ResponseError,
   withNickname,
 } from "@/lib/client";
 
 export function AlbumEditor({ id }: { id: string }) {
+  const router = useRouter();
   const [album, setAlbum] = useState<Album | null>(null);
   const [token, setToken] = useState("");
   const [nickname, setNickname] = useState("");
@@ -47,6 +50,16 @@ export function AlbumEditor({ id }: { id: string }) {
   const uploadPanel = useRef<PanelId>("hero-left");
   const objectUrls = useRef(new Set<string>());
   const choosingPhoto = useRef(false);
+  async function deleteCurrentAlbum() {
+    if (busy || !window.confirm("이 앨범의 사진과 링크를 서버에서 삭제할까요? 저장하지 않은 변경 사항도 사라지며, 삭제한 데이터는 복구할 수 없습니다.")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await deleteSavedAlbum(id, token);
+      setDirty(false);
+      router.replace("/");
+    } catch (error) { setError((error as Error).message); setBusy(false); }
+  }
   const worldUrl = withNickname(dataUrl, nickname);
   const expiryText = album?.expiresAt
     ? new Intl.DateTimeFormat("ko-KR", {
@@ -333,6 +346,7 @@ export function AlbumEditor({ id }: { id: string }) {
               disabled={busy}
             />
             <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 사진당 {MAX_IMAGE_MB}MB까지 · 저장 후 24시간 보관</p>
+            <p className="gallery-empty-note">사진을 넣지 않은 패널은 월드에서 자동으로 제거됩니다.</p>
           </section>
           <div className="controller-inspector">
             <input
@@ -401,6 +415,7 @@ export function AlbumEditor({ id }: { id: string }) {
             </Button>
           </div>
         </section>}
+        <div className="editor-delete"><Button variant="ghost" className="delete-album-button" onClick={deleteCurrentAlbum} disabled={busy}>앨범 삭제</Button></div>
       </main>
     </div>
   );

@@ -9,13 +9,21 @@ import {
   jsonError,
   readBoundedFormData,
 } from "@/lib/api";
-import { getAlbumDataUrl, readAlbumForEdit, updateAlbum } from "@/lib/storage";
+import { deleteAlbum, getAlbumDataUrl, readAlbumForEdit, updateAlbum } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 type Params = {
   params: Promise<{ id: string }>;
 };
+
+export async function DELETE(request: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    await deleteAlbum(id, getBearerToken(request));
+    return NextResponse.json({ deleted: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) { return jsonError(error); }
+}
 
 export async function GET(request: Request, { params }: Params) {
   try {

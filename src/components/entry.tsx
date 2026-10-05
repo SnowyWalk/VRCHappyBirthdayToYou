@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowRight, FolderOpen, LoaderCircle } from "lucide-react";
+import { ArrowRight, FolderOpen, LoaderCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { parseAlbumInput, readResponse, rememberAlbum, recalledToken, refreshRecentAlbums, readRecentAlbums, formatRelativeTime, type RecentAlbum } from "@/lib/client";
+import { parseAlbumInput, readResponse, rememberAlbum, recalledToken, refreshRecentAlbums, readRecentAlbums, formatRelativeTime, deleteSavedAlbum, type RecentAlbum } from "@/lib/client";
 import type { Album } from "@/lib/panels";
 import { WORLD_OVERVIEW } from "@/lib/world-view";
 
@@ -32,9 +32,21 @@ export function Entry() {
     void refreshRecentAlbums().then(albums => {
       if (!cancelled) { setRecent(albums); setNow(Date.now()); }
     });
-    const timer = setInterval(() => { setRecent(readRecentAlbums()); setNow(Date.now()); }, 60000);
+    const timer = setInterval(() => { setRecent(readRecentAlbums()); setNow(Date.now()); }, 1000);
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
+  async function removeAlbum(album: RecentAlbum) {
+    if (busy || !window.confirm("이 앨범의 사진과 링크를 서버에서 삭제할까요? 삭제한 데이터는 복구할 수 없습니다.")) return;
+    setBusy(true);
+    setError("");
+    try {
+      const token = recalledToken(album.id);
+      if (!token) throw new Error("편집 권한을 찾을 수 없습니다.");
+      await deleteSavedAlbum(album.id, token);
+      setRecent(readRecentAlbums());
+    } catch (error) { setError((error as Error).message); }
+    finally { setBusy(false); }
+  }
   async function create() {
     setBusy(true);
     setError("");
@@ -133,6 +145,8 @@ export function Entry() {
             {album.revision > 0 ? <time dateTime={album.updatedAt} title={new Intl.DateTimeFormat("ko-KR", { dateStyle: "full", timeStyle: "long" }).format(new Date(album.updatedAt))}>
               {formatRelativeTime(album.updatedAt, now)}
             </time> : <span className="recent-unsaved">아직 저장하지 않음</span>}
+            <button type="button" className="recent-delete" disabled={busy}
+              aria-label={`${album.nickname || album.id} 앨범 삭제`} title="서버에서 앨범 삭제" onClick={() => void removeAlbum(album)}><X size={16} /></button>
           </li>)}</ul>
         </section>}
         {error && !open && (

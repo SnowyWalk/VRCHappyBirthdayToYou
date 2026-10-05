@@ -636,6 +636,59 @@ test("album route rejects duplicate image files for the same panel", async (t) =
   });
 });
 
+test("authenticated deletion removes original photos and all exclusive atlas versions", async (t) => {
+  const dir = await useTempStorage(t);
+  const { album, editToken } = await createAlbum();
+  const first = await updateAlbum(album.id, editToken, { nickname: "삭제", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] });
+  const second = await updateAlbum(album.id, editToken, { nickname: "삭제", revision: 1, remove: ["hero-left"], images: [] });
+  const params = { params: Promise.resolve({ id: album.id }) };
+  const denied = await albumRoute.DELETE(new Request("http://localhost/api/albums/test", { method: "DELETE", headers: { authorization: "Bearer wrong" } }), params);
+  assert.equal(denied.status, 401);
+  assert.equal((await readAlbumForEdit(album.id, editToken)).revision, 2);
+  const response = await albumRoute.DELETE(new Request("http://localhost/api/albums/test", { method: "DELETE", headers: { authorization: `Bearer ${editToken}` } }), params);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { deleted: true });
+  assert.equal(await storage.storagePathExists(path.join(dir, "albums", album.id)), false);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", first.atlasId!)), false);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", second.atlasId!)), false);
+  await assert.rejects(readAlbumForEdit(album.id, editToken), error => error instanceof StorageError && error.status === 404);
+});
+
+test("deleting shared atlas owners preserves current and old links until the last owner deletes", async (t) => {
+  const dir = await useTempStorage(t);
+  const first = await createAlbum();
+  const second = await createAlbum();
+  const old = [];
+  const current = [];
+  for (const owner of [first, second]) {
+    old.push(await updateAlbum(owner.album.id, owner.editToken, { nickname: "공유", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] }));
+    current.push(await updateAlbum(owner.album.id, owner.editToken, { nickname: "공유", revision: 1, remove: ["hero-left"], images: [] }));
+  }
+  assert.equal(old[0].atlasId, old[1].atlasId);
+  assert.equal(current[0].atlasId, current[1].atlasId);
+  await storage.deleteAlbum(first.album.id, first.editToken);
+  assert.ok(await storage.getPartyAtlas(old[0].atlasId!));
+  assert.ok(await storage.getPartyAtlas(current[0].atlasId!));
+  assert.deepEqual(await storage.resolveAtlasAlbums(old[0].atlasId!), [second.album.id]);
+  await storage.deleteAlbum(second.album.id, second.editToken);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", old[0].atlasId!)), false);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", current[0].atlasId!)), false);
+});
+
+test("draft and expired albums can be deleted with their edit key", async (t) => {
+  const dir = await useTempStorage(t);
+  const draft = await createAlbum();
+  await storage.deleteAlbum(draft.album.id, draft.editToken);
+  assert.equal(await storage.storagePathExists(path.join(dir, "albums", draft.album.id)), false);
+  const expired = await createAlbum();
+  const file = path.join(dir, "albums", expired.album.id, "metadata.json");
+  const metadata = JSON.parse(await readFile(file, "utf8"));
+  metadata.album.expiresAt = new Date(Date.now() - 1).toISOString();
+  await writeFile(file, JSON.stringify(metadata));
+  await storage.deleteAlbum(expired.album.id, expired.editToken);
+  assert.equal(await storage.storagePathExists(path.join(dir, "albums", expired.album.id)), false);
+});
+
 async function useTempStorage(t: TestContext) {
   const previousStorageDir = process.env.STORAGE_DIR;
   const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;

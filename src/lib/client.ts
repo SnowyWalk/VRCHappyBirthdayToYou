@@ -40,6 +40,19 @@ export function rememberAlbum(album: Album, token: string) {
   } catch { /* The private edit URL remains usable without browser storage. */ }
 }
 
+export function forgetAlbum(id: string) {
+  try {
+    localStorage.removeItem(tokenKey(id));
+    localStorage.setItem(recentKey, JSON.stringify(storedRecentAlbums().filter(record => record.id !== id)));
+  } catch { /* Server deletion does not depend on browser storage. */ }
+}
+
+export async function deleteSavedAlbum(id: string, token: string) {
+  const response = await fetch(`/api/albums/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  if (response.status !== 404) await readResponse(response);
+  forgetAlbum(id);
+}
+
 export async function refreshRecentAlbums(): Promise<RecentAlbum[]> {
   const ids = new Set(storedRecentAlbums().map(record => record.id));
   try {

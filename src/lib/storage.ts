@@ -233,7 +233,7 @@ export async function updateAlbum(
       media,
     };
 
-    await renewPartyExpiry(published.atlasId, nextStored.album.expiresAt!);
+    await renewPartyExpiry(published.atlasId, nextStored.album.expiresAt!, id);
     await writeStoredAlbum(id, nextStored);
     await pruneUnusedMedia(id, nextStored);
     return nextStored.album;
@@ -500,7 +500,7 @@ export async function resolveAtlasAlbums(hash: string): Promise<string[]> {
       if (error instanceof StorageError && [404, 410].includes(error.status)) return null;
       throw error;
     });
-    if (stored && (stored.album.atlasId === hash || stored.album.id === metadata.albumId)) ids.add(stored.album.id);
+    if (stored && (stored.album.atlasId === hash || (metadata.albumIds ?? [metadata.albumId]).includes(stored.album.id))) ids.add(stored.album.id);
   }
   return [...ids];
 }
@@ -642,7 +642,7 @@ export async function storagePathExists(filePath: string) {
 }
 
 
-type PartyMetadata = { albumId: string; createdAt: string; expiresAt?: string };
+type PartyMetadata = { albumId: string; albumIds?: string[]; createdAt: string; expiresAt?: string };
 
 function getAlbumExpiry(album: Album) {
   return Date.parse(album.expiresAt ?? new Date(Date.parse(album.updatedAt) + RETENTION_MS).toISOString());
@@ -659,10 +659,11 @@ async function readLivePartyMetadata(hash: string): Promise<PartyMetadata> {
   return metadata;
 }
 
-async function renewPartyExpiry(hash: string, expiresAt: string) {
+async function renewPartyExpiry(hash: string, expiresAt: string, albumId: string) {
   const metadata = JSON.parse(await readFile(getPartyMetadataPath(hash), "utf8")) as PartyMetadata;
   // A deduplicated atlas remains available while any album's save is still valid.
   metadata.expiresAt = new Date(Math.max(Date.parse(expiresAt), Date.parse(metadata.expiresAt ?? metadata.createdAt))).toISOString();
+  metadata.albumIds = [...new Set([...(metadata.albumIds ?? [metadata.albumId]), albumId])];
   await writeFileAtomic(getPartyMetadataPath(hash), Buffer.from(JSON.stringify(metadata, null, 2)));
 }
 
@@ -681,6 +682,42 @@ async function listStorageDirectories(dir: string) {
   return readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return [];
     throw error;
+  });
+}
+
+export async function deleteAlbum(id: string, token: string) {
+  assertAlbumId(id);
+  return withAlbumWriteLock(STORAGE_LOCK_ID, async () => {
+    const raw = await readFile(getAlbumFilePath(id), "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") throw new StorageError(404, "앨범을 찾을 수 없습니다.");
+      throw error;
+    });
+    const stored = JSON.parse(raw) as StoredAlbum;
+    verifyToken(stored, token);
+    const remaining: Album[] = [];
+    for (const entry of await listStorageDirectories(path.join(getStorageRoot(), "albums"))) {
+      if (!entry.isDirectory() || !UUID_RE.test(entry.name) || entry.name === id) continue;
+      const other = JSON.parse(await readFile(getAlbumFilePath(entry.name), "utf8")) as StoredAlbum;
+      if (Date.now() < getAlbumExpiry(other.album)) remaining.push(other.album);
+    }
+    const related = [];
+    for (const entry of await listStorageDirectories(path.join(getStorageRoot(), "parties"))) {
+      if (!entry.isDirectory() || !HASH_RE.test(entry.name)) continue;
+      const metadata = JSON.parse(await readFile(getPartyMetadataPath(entry.name), "utf8")) as PartyMetadata;
+      const owners = metadata.albumIds ?? [metadata.albumId];
+      if (!owners.includes(id) && metadata.albumId !== id && stored.album.atlasId !== entry.name) continue;
+      const activeOwners = remaining.filter(album => owners.includes(album.id) || album.atlasId === entry.name);
+      related.push({ hash: entry.name, metadata, activeOwners });
+    }
+    await rm(getAlbumDir(id), { recursive: true, force: true });
+    for (const { hash, metadata, activeOwners } of related) {
+      if (!activeOwners.length) await rm(getPartyDir(hash), { recursive: true, force: true });
+      else {
+        metadata.albumIds = activeOwners.map(album => album.id);
+        metadata.albumId = activeOwners[0].id;
+        await writeFileAtomic(getPartyMetadataPath(hash), Buffer.from(JSON.stringify(metadata, null, 2)));
+      }
+    }
   });
 }
 
