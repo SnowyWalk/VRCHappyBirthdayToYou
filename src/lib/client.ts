@@ -2,7 +2,7 @@ import type { Album } from "./panels";
 
 export const tokenKey = (id: string) => `birthday-world:edit:${id}`;
 const recentKey = "birthday-world:recent-albums";
-export type RecentAlbum = Pick<Album, "id" | "nickname" | "createdAt" | "updatedAt" | "expiresAt" | "revision" | "atlasId">;
+export type RecentAlbum = Pick<Album, "id" | "nickname" | "createdAt" | "updatedAt" | "expiresAt" | "revision" | "atlasId"> & { photoCount?: number };
 type StoredRecentAlbum = RecentAlbum & { editToken: string };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -25,7 +25,7 @@ export function readRecentAlbums(): RecentAlbum[] {
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 5)
     .map(record => ({ id: record.id, nickname: record.nickname, createdAt: record.createdAt,
-      updatedAt: record.updatedAt, expiresAt: record.expiresAt, revision: record.revision, atlasId: record.atlasId }));
+      updatedAt: record.updatedAt, expiresAt: record.expiresAt, revision: record.revision, atlasId: record.atlasId, photoCount: record.photoCount }));
 }
 
 export function rememberAlbum(album: Album, token: string) {
@@ -34,7 +34,7 @@ export function rememberAlbum(album: Album, token: string) {
     const records = storedRecentAlbums().filter(record => record.id !== album.id);
     records.push({ id: album.id, nickname: album.nickname, createdAt: album.createdAt,
       updatedAt: album.updatedAt, expiresAt: album.expiresAt, revision: album.revision,
-      atlasId: album.atlasId, editToken: token });
+      atlasId: album.atlasId, editToken: token, photoCount: Object.values(album.panels).filter(Boolean).length });
     records.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     localStorage.setItem(recentKey, JSON.stringify(records.slice(0, 5)));
   } catch { /* The private edit URL remains usable without browser storage. */ }

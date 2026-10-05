@@ -140,7 +140,7 @@ export function Entry() {
           <ul>{recent.map(album => <li key={album.id}>
             <Link href={`/edit/${album.id}#key=${recalledToken(album.id) ?? ""}`}>
               <span>{album.nickname || album.id}</span>
-              <small>{album.nickname ? album.id : ""}</small>
+              <small>{typeof album.photoCount === "number" ? `사진 ${album.photoCount}장` : ""}{album.nickname ? `${typeof album.photoCount === "number" ? " · " : ""}${album.id}` : ""}</small>
             </Link>
             {album.revision > 0 ? <time dateTime={album.updatedAt} title={new Intl.DateTimeFormat("ko-KR", { dateStyle: "full", timeStyle: "long" }).format(new Date(album.updatedAt))}>
               {formatRelativeTime(album.updatedAt, now)}

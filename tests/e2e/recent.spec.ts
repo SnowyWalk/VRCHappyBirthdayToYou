@@ -23,6 +23,7 @@ test("recent links restore legacy tokens, retain the latest five issuances and r
   for (let index = 0; index < 5; index++) {
     const record = records[5 - index];
     await expect(recent.getByRole("link").nth(index)).toContainText(record.album.nickname);
+    await expect(recent.getByRole("link").nth(index)).toContainText(index === 0 ? "사진 1장" : "사진 0장");
     await expect(recent.getByRole("link").nth(index)).toHaveAttribute("href", `/edit/${record.album.id}#key=${record.editToken}`);
     await expect(recent.locator("time").nth(index)).toHaveAttribute("datetime", record.album.updatedAt);
     await expect(recent.locator("time").nth(index)).toHaveText("방금 전");
@@ -43,6 +44,11 @@ test("recent links restore legacy tokens, retain the latest five issuances and r
   await page.getByLabel("앨범 링크 또는 UUID").fill(url);
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
   await expect(page.getByLabel("생일자의 이름")).toHaveValue("수정 완료");
+  await page.getByRole("button", { name: "L1 사진 제거", exact: true }).click();
+  await page.getByRole("button", { name: "변경 사항 저장", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+  await page.goto("/");
+  await expect(recent.getByRole("link").first()).toContainText("사진 0장");
 });
 
 test("new draft appears as an editable recent issuance without pretending it was saved", async ({ page }) => {
@@ -53,6 +59,7 @@ test("new draft appears as an editable recent issuance without pretending it was
   await page.goto("/");
   const recent = page.getByRole("region", { name: "최근 편집 링크", exact: true });
   await expect(recent.getByRole("link")).toHaveCount(1);
+  await expect(recent.getByRole("link")).toContainText("사진 0장");
   await expect(recent).toContainText("아직 저장하지 않음");
   await recent.getByRole("link").click();
   await expect(page).toHaveURL(edit);
