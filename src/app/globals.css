@@ -104,6 +104,7 @@ button:disabled { cursor: default; }
 .scene-panel.drop-target { background: #234ca9e6; border-color: #91d9ff; box-shadow: inset 0 0 0 5px #91d9ff, 0 0 20px #91d9ff; }
 .scene-panel:focus-visible { outline: 5px solid #fff; outline-offset: 4px; }
 .scene-panel:disabled { opacity: .6; }
+.scene-panel.populated { background: #000; opacity: 1; }
 .scene-panel > img { object-fit: contain; }
 .panel-remove { position: absolute; width: 44px; height: 44px; display: grid; place-items: center; background: #080d19dc; color: white; border: 1px solid #e8ecff; border-radius: 6px; }
 .panel-remove:hover { background: #7f1d1d; }

@@ -422,6 +422,8 @@ test("drop assigns only the targeted panel and reveals the link after saving", a
   }
   await drop([landscapeImage]);
   await expect(panel).toHaveClass(/populated/);
+  await expect(panel).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await expect(panel).toHaveCSS("opacity", "1");
   await expect(page.locator(".scene-panel.populated")).toHaveCount(1);
   await expect(page.locator(".world-link")).toHaveCount(0);
   const firstPreview = await panel.locator("img").getAttribute("src");
@@ -433,6 +435,9 @@ test("drop assigns only the targeted panel and reveals the link after saving", a
   await expect(panel.locator("img")).toHaveAttribute("src", firstPreview!);
   await drop([portraitImage]);
   await expect(panel.locator("img")).not.toHaveAttribute("src", firstPreview!);
+  await panel.hover();
+  await expect(panel).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await expect(panel).toHaveCSS("opacity", "1");
   await expect(page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true })).toBeEnabled();
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
