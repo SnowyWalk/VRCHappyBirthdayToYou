@@ -2,6 +2,27 @@
 
 앱은 한 개의 Node 프로세스로 실행하고, 사진·앨범·발행 PNG는 Docker named volume에 보관합니다. TLS와 도메인은 Nginx Proxy Manager에서 연결합니다. Linux amd64와 arm64 모두 해당 서버에서 직접 빌드할 수 있습니다.
 
+## 현재 운영 환경
+
+- 사이트: https://hbd.snowywalk.me
+- 저장소: https://github.com/SnowyWalk/VRCHappyBirthdayToYou
+- EC2 프로젝트 경로: `/home/ubuntu/VRCHappyBirthdayToYou`
+- NPM 공유 네트워크: `proxy`, 전달 대상: `http://birthday-world:3000`
+- NPM에서 Let's Encrypt 인증서, HTTP → HTTPS 강제 이동, HTTP/2를 설정했습니다.
+- 사진과 앨범은 `vrchappybirthdaytoyou_birthday-data` 볼륨에 저장됩니다. 기존 로컬 데이터는 자동 이관하지 않았습니다.
+
+이 서버의 업데이트 명령:
+
+```sh
+cd /home/ubuntu/VRCHappyBirthdayToYou
+git pull --ff-only
+docker compose -f compose.yaml -f compose.npm.yaml up -d --build --wait
+```
+
+배포 검증에서 HTTPS로 사진 8장과 유니코드 이름을 저장하고 2048×2048 PNG를 내려받았습니다. 컨테이너를 재생성한 뒤에도 앨범과 PNG의 SHA-256이 유지됨을 확인했습니다.
+
+현재 DNS는 Cloudflare 프록시를 통과합니다. Cloudflare Free/Pro의 요청 전체 업로드 제한은 100MB이므로 사진 여러 장의 합계가 이를 넘으면 NPM의 512MB 설정과 관계없이 거절될 수 있습니다. 8×60MB를 모두 허용하려면 `hbd` A 레코드를 EC2 IP로 지정하고 **DNS 전용**으로 설정하거나 업로드 요청을 분할해야 합니다. [Cloudflare 업로드 제한](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits).
+
 ## 최초 실행
 
 Docker Engine과 Compose v2가 설치된 EC2에서 저장소를 clone한 뒤 실행합니다. 비공개 저장소는 서버에서 읽기 권한이 있는 SSH 키 또는 GitHub 인증을 사용합니다.

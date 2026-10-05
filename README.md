@@ -2,6 +2,8 @@
 
 Next.js + shadcn/ui + Tailwind CSS. 실제 월드 전경 속 8개 패널을 직접 눌러 사진과 이름을 설정하고, **BWAT v1 PNG 직접 링크**를 발급합니다.
 
+운영 사이트: [hbd.snowywalk.me](https://hbd.snowywalk.me). EC2 Docker 운영 및 업데이트 방법은 [배포 문서](docs/DOCKER_DEPLOYMENT.md)를 참고하세요.
+
 ## 실행
 
 Node.js 24 권장. Windows 작업 공간에서는 Webpack을 사용합니다.
