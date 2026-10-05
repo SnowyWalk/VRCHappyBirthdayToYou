@@ -4,7 +4,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   encodeAtlas,
@@ -15,6 +15,8 @@ import { PANELS, type Album, type PanelId } from "./panels";
 
 import { MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "./upload-limits";
 const MAX_NICKNAME_BYTES = 128;
+export const RETENTION_MS = 24 * 60 * 60 * 1000;
+const STORAGE_LOCK_ID = "00000000-0000-4000-8000-000000000000";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const HASH_RE = /^[a-f0-9]{64}$/;
@@ -78,7 +80,11 @@ export type ImageInput = {
 };
 
 const panelIds = new Set<string>(PANELS.map((panel) => panel.id));
-const writeQueues = new Map<string, Promise<unknown>>();
+// Instrumentation and route bundles must share the same in-process save lock.
+const storageGlobal = globalThis as typeof globalThis & {
+  birthdayWriteQueues?: Map<string, Promise<unknown>>;
+};
+const writeQueues = storageGlobal.birthdayWriteQueues ??= new Map<string, Promise<unknown>>();
 
 export function getStorageRoot() {
   return path.resolve(process.env.STORAGE_DIR ?? "./storage");
@@ -111,28 +117,31 @@ export function getAlbumMediaPath(id: string, hash: string, ext: string) {
 }
 
 export async function createAlbum() {
-  const id = randomUUID();
-  const editToken = randomBytes(32).toString("base64url");
-  const now = new Date().toISOString();
-  const album: AlbumWithAtlas = {
-    id,
-    nickname: "",
-    revision: 0,
-    createdAt: now,
-    updatedAt: now,
-    panels: emptyPanels(),
-  };
+  return withAlbumWriteLock(STORAGE_LOCK_ID, async () => {
+    const id = randomUUID();
+    const editToken = randomBytes(32).toString("base64url");
+    const now = new Date().toISOString();
+    const album: AlbumWithAtlas = {
+      id,
+      nickname: "",
+      revision: 0,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: new Date(Date.parse(now) + RETENTION_MS).toISOString(),
+      panels: emptyPanels(),
+    };
 
-  const stored: StoredAlbum = {
-    album,
-    editTokenHash: sha256String(editToken),
-    media: {},
-  };
+    const stored: StoredAlbum = {
+      album,
+      editTokenHash: sha256String(editToken),
+      media: {},
+    };
 
-  await mkdir(path.join(getAlbumDir(id), "media"), { recursive: true });
-  await writeStoredAlbum(id, stored);
+    await mkdir(path.join(getAlbumDir(id), "media"), { recursive: true });
+    await writeStoredAlbum(id, stored);
 
-  return { album, editToken };
+    return { album, editToken };
+  });
 }
 
 export async function readAlbumForEdit(id: string, token: string) {
@@ -151,7 +160,7 @@ export async function updateAlbum(
     images: ImageInput[];
   },
 ) {
-  return withAlbumWriteLock(id, async () => {
+  return withAlbumWriteLock(STORAGE_LOCK_ID, async () => {
     const stored = await readStoredAlbum(id);
     verifyToken(stored, token);
 
@@ -163,6 +172,11 @@ export async function updateAlbum(
     }
 
     const nickname = normalizeNickname(input.nickname);
+    const disk = await statfs(getStorageRoot());
+    const requiredBytes = input.images.reduce((sum, image) => sum + image.bytes.byteLength, 0);
+    if (disk.bavail * disk.bsize < requiredBytes + 512 * 1024 * 1024) {
+      throw new StorageError(503, "서버의 저장 공간이 부족합니다. 잠시 후 다시 저장해 주세요.");
+    }
     const panels = { ...stored.album.panels };
 
     for (const panelId of input.remove) {
@@ -213,12 +227,15 @@ export async function updateAlbum(
           published.panelOrientations || getPanelOrientations(panels, media),
         revision: nextRevision,
         updatedAt: now,
+        expiresAt: new Date(Date.parse(now) + RETENTION_MS).toISOString(),
         atlasId: published.atlasId,
       },
       media,
     };
 
+    await renewPartyExpiry(published.atlasId, nextStored.album.expiresAt!);
     await writeStoredAlbum(id, nextStored);
+    await pruneUnusedMedia(id, nextStored);
     return nextStored.album;
   });
 }
@@ -291,6 +308,7 @@ export async function getMedia(id: string, hash: string) {
 
 export async function getPartyAtlas(hash: string) {
   assertHash(hash);
+  await readLivePartyMetadata(hash);
   const bytes = await readFile(getPartyAtlasPath(hash)).catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") {
@@ -382,7 +400,11 @@ async function readStoredAlbum(id: string): Promise<StoredAlbum> {
     },
   );
 
-  return JSON.parse(raw) as StoredAlbum;
+  const stored = JSON.parse(raw) as StoredAlbum;
+  const expiresAt = getAlbumExpiry(stored.album);
+  if (Date.now() >= expiresAt) throw new StorageError(410, "저장 후 24시간이 지나 만료된 앨범입니다. 새로 만들어 주세요.");
+  stored.album.expiresAt = new Date(expiresAt).toISOString();
+  return stored;
 }
 
 async function writeStoredAlbum(id: string, stored: StoredAlbum) {
@@ -468,20 +490,17 @@ function getPartyMetadataPath(hash: string) {
 
 export async function resolveAtlasAlbums(hash: string): Promise<string[]> {
   assertHash(hash);
-  const raw = await readFile(getPartyMetadataPath(hash), "utf8").catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") throw new StorageError(404, "저장된 이미지 링크를 찾을 수 없어요.");
-      throw error;
-    },
-  );
-  const metadata = JSON.parse(raw) as { albumId: string };
-  const ids = new Set<string>([metadata.albumId]);
+  const metadata = await readLivePartyMetadata(hash);
+  const ids = new Set<string>();
   // Identical PNGs can be shared by multiple albums. Include all current owners.
   const albums = await readdir(path.join(getStorageRoot(), "albums"), { withFileTypes: true });
   for (const entry of albums) {
     if (!entry.isDirectory() || !UUID_RE.test(entry.name)) continue;
-    const stored = await readStoredAlbum(entry.name);
-    if (stored.album.atlasId === hash) ids.add(stored.album.id);
+    const stored = await readStoredAlbum(entry.name).catch((error) => {
+      if (error instanceof StorageError && [404, 410].includes(error.status)) return null;
+      throw error;
+    });
+    if (stored && (stored.album.atlasId === hash || stored.album.id === metadata.albumId)) ids.add(stored.album.id);
   }
   return [...ids];
 }
@@ -594,6 +613,7 @@ async function publishAtlas(
             },
             records: atlas.records,
             createdAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + RETENTION_MS).toISOString(),
           },
           null,
           2,
@@ -619,4 +639,87 @@ export async function storagePathExists(filePath: string) {
       }
       throw error;
     });
+}
+
+
+type PartyMetadata = { albumId: string; createdAt: string; expiresAt?: string };
+
+function getAlbumExpiry(album: Album) {
+  return Date.parse(album.expiresAt ?? new Date(Date.parse(album.updatedAt) + RETENTION_MS).toISOString());
+}
+
+async function readLivePartyMetadata(hash: string): Promise<PartyMetadata> {
+  const raw = await readFile(getPartyMetadataPath(hash), "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") throw new StorageError(404, "사진 링크가 만료되었거나 존재하지 않습니다. 새로 만들어 주세요.");
+    throw error;
+  });
+  const metadata = JSON.parse(raw) as PartyMetadata;
+  const expiry = Date.parse(metadata.expiresAt ?? new Date(Date.parse(metadata.createdAt) + RETENTION_MS).toISOString());
+  if (Date.now() >= expiry) throw new StorageError(410, "저장 후 24시간이 지나 만료된 사진 링크입니다. 새로 만들어 주세요.");
+  return metadata;
+}
+
+async function renewPartyExpiry(hash: string, expiresAt: string) {
+  const metadata = JSON.parse(await readFile(getPartyMetadataPath(hash), "utf8")) as PartyMetadata;
+  // A deduplicated atlas remains available while any album's save is still valid.
+  metadata.expiresAt = new Date(Math.max(Date.parse(expiresAt), Date.parse(metadata.expiresAt ?? metadata.createdAt))).toISOString();
+  await writeFileAtomic(getPartyMetadataPath(hash), Buffer.from(JSON.stringify(metadata, null, 2)));
+}
+
+async function pruneUnusedMedia(id: string, stored: StoredAlbum) {
+  const active = new Set(Object.values(stored.album.panels).filter(Boolean));
+  for (const [hash, image] of Object.entries(stored.media)) {
+    if (!active.has(hash)) {
+      await rm(getAlbumMediaPath(id, hash, image.ext), { force: true });
+      delete stored.media[hash];
+    }
+  }
+  await writeStoredAlbum(id, stored);
+}
+
+async function listStorageDirectories(dir: string) {
+  return readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+}
+
+/** Runs under the same lock as saves, including atlas publication and renewal. */
+export async function cleanupExpiredStorage() {
+  return withAlbumWriteLock(STORAGE_LOCK_ID, async () => {
+    const now = Date.now();
+    let albumsDeleted = 0;
+    let atlasesDeleted = 0;
+    for (const entry of await listStorageDirectories(path.join(getStorageRoot(), "albums"))) {
+      if (!entry.isDirectory() || !UUID_RE.test(entry.name)) continue;
+      const dir = getAlbumDir(entry.name);
+      try {
+        const stored = JSON.parse(await readFile(getAlbumFilePath(entry.name), "utf8")) as StoredAlbum;
+        if (now >= getAlbumExpiry(stored.album)) {
+          await rm(dir, { recursive: true, force: true });
+          albumsDeleted++;
+        } else {
+          await pruneUnusedMedia(entry.name, stored);
+          // Failed saves may leave files not committed in metadata. The save lock
+          // prevents deleting an upload while it is still being published.
+          const keep = new Set(Object.entries(stored.media).map(([hash, image]) => `${hash}.${image.ext}`));
+          for (const file of await listStorageDirectories(path.join(dir, "media"))) {
+            if (file.isFile() && !keep.has(file.name)) await rm(path.join(dir, "media", file.name), { force: true });
+          }
+        }
+      } catch (error) { console.error("Album cleanup failed:", entry.name, error); }
+    }
+    for (const entry of await listStorageDirectories(path.join(getStorageRoot(), "parties"))) {
+      if (!entry.isDirectory() || !HASH_RE.test(entry.name)) continue;
+      try {
+        const metadata = JSON.parse(await readFile(getPartyMetadataPath(entry.name), "utf8")) as PartyMetadata;
+        const expiry = Date.parse(metadata.expiresAt ?? new Date(Date.parse(metadata.createdAt) + RETENTION_MS).toISOString());
+        if (now >= expiry) {
+          await rm(getPartyDir(entry.name), { recursive: true, force: true });
+          atlasesDeleted++;
+        }
+      } catch (error) { console.error("Atlas cleanup failed:", entry.name, error); }
+    }
+    return { albumsDeleted, atlasesDeleted };
+  });
 }

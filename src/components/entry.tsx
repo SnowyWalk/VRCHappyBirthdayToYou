@@ -85,6 +85,9 @@ export function Entry() {
           />
           <div className="entry-content">
             <h1 className="sr-only">사진 설정</h1>
+            <p className="entry-expiry-note">
+              저장한 사진과 링크는 24시간 뒤 자동 삭제됩니다.
+            </p>
             <Button
               size="lg"
               onClick={create}

@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: Params) {
     const atlas = await getPartyAtlas(hash);
     return new Response(atlas.bytes, {
       headers: {
-        "Cache-Control": "public, immutable, max-age=31536000, no-transform",
+        "Cache-Control": "no-store, no-transform",
         "Content-Type": atlas.contentType,
       },
     });

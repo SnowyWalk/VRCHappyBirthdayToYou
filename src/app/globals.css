@@ -73,7 +73,8 @@ button:disabled { cursor: default; }
 .entry-controller { padding-top: 0; }
 .entry-world { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .entry-world > img { position: static !important; width: 100% !important; height: auto !important; aspect-ratio: 1160/640; object-fit: contain; }
-.entry-content { padding: 22px; display: flex; align-items: center; justify-content: center; gap: 22px; }
+.entry-content { padding: 22px; display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; }
+.entry-expiry-note { flex-basis: 100%; margin: 0; color: var(--subtle); font-size: 12px; text-align: center; }
 .entry-content .create-button { width: 320px; height: 68px; border-radius: 8px; background: #315ddd; color: #fff; font-size: 18px; font-weight: 600; gap: 24px; }
 .entry-content .create-button:hover { background: #244bbb; }
 .entry-content .create-button svg { order: 2; width: 20px; height: 20px; }
@@ -142,6 +143,7 @@ button:disabled { cursor: default; }
 }
 @media(max-width: 700px) {
   .entry-content { flex-direction: column; gap: 10px; padding: 18px; }
+  .entry-expiry-note { order: 3; font-size: 11px; line-height: 1.6; }
   .entry-content .create-button { width: 100%; min-height: 64px; }
   .controller-header { height: 64px; padding: 0 18px; }
   .brand { font-size: 15px; gap: 5px; }

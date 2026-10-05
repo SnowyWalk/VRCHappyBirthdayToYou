@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: Params) {
     return new Response(image.bytes, {
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "public, immutable, max-age=31536000",
+        "Cache-Control": "no-store",
         "Content-Type": image.contentType,
       },
     });

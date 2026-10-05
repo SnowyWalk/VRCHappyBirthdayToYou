@@ -47,6 +47,12 @@ export function AlbumEditor({ id }: { id: string }) {
   const uploadPanel = useRef<PanelId>("hero-left");
   const objectUrls = useRef(new Set<string>());
   const worldUrl = withNickname(dataUrl, nickname);
+  const expiryText = album?.expiresAt
+    ? new Intl.DateTimeFormat("ko-KR", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date(album.expiresAt))
+    : "";
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -316,7 +322,7 @@ export function AlbumEditor({ id }: { id: string }) {
               onRemove={remove}
               disabled={busy}
             />
-            <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 사진당 {MAX_IMAGE_MB}MB까지</p>
+            <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 사진당 {MAX_IMAGE_MB}MB까지 · 저장 후 24시간 보관</p>
           </section>
           <div className="controller-inspector">
             <input
@@ -361,7 +367,10 @@ export function AlbumEditor({ id }: { id: string }) {
           </div>
         </div>
         <section className="world-link" aria-label="월드에 적용할 링크">
-          <label htmlFor="world-url">월드에 붙여 넣을 링크{dataUrl && (Object.keys(files).length || removed.length) ? " · 새 사진은 저장 후 반영돼요" : ""}</label>
+          <label htmlFor="world-url">
+            월드에 붙여 넣을 링크{dataUrl && (Object.keys(files).length || removed.length) ? " · 새 사진은 저장 후 반영돼요" : ""}
+            {expiryText ? ` · ${expiryText} 만료` : " · 저장 후 24시간 보관"}
+          </label>
           <div>
             <Input
               id="world-url"

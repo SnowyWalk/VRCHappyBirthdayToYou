@@ -64,6 +64,7 @@ const partyRouteImportPath = "../src/app/party/[hash]/atlas.png/route.ts";
 const storage: StorageModule = await import(storageImportPath);
 const {
   createAlbum,
+  cleanupExpiredStorage,
   getMedia,
   readAlbumForEdit,
   readPublicManifest,
@@ -153,6 +154,7 @@ test("creates an album with a one-time edit token kept out of the public album",
   assert.equal(album.nickname, "");
   assert.equal("editTokenHash" in album, false);
   assert.equal(typeof editToken, "string");
+  assert.match(album.expiresAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
 
   const metadataPath = path.join(
     storageDir,
@@ -223,7 +225,7 @@ test("updates an existing album, deduplicates repeated image bytes, and exposes 
   assert.deepEqual(new Uint8Array(media.bytes), PNG_BYTES);
 });
 
-test("publishes immutable party atlas versions and persists metadata", async (t) => {
+test("publishes party atlas versions and persists expiry metadata", async (t) => {
   const storageDir = await useTempStorage(t);
   process.env.PUBLIC_BASE_URL = "https://birthday.example";
   const { album, editToken } = await createAlbum();
@@ -249,6 +251,7 @@ test("publishes immutable party atlas versions and persists metadata", async (t)
   assert.match(firstMetadata.headerHex, /^[a-f0-9]{512}$/);
   assert.equal(firstMetadata.header.revision, 1);
   assert.equal(firstMetadata.header.nicknameLength, 0);
+  assert.match(firstMetadata.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(Buffer.from(firstMetadata.headerHex, "hex")[6], 0);
   assert.equal(firstMetadata.records.find((record: { panelId: number; active: boolean }) => record.panelId === 1)?.active, true);
 
@@ -260,7 +263,7 @@ test("publishes immutable party atlas versions and persists metadata", async (t)
   assert.equal(response.headers.get("content-type"), "image/png");
   assert.equal(
     response.headers.get("cache-control"),
-    "public, immutable, max-age=31536000, no-transform",
+    "no-store, no-transform",
   );
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array(firstBytes));
 
@@ -287,6 +290,67 @@ test("publishes immutable party atlas versions and persists metadata", async (t)
       ),
     ),
     new Uint8Array(firstBytes),
+  );
+});
+
+test("expires album and atlas data after the retention window and removes files", async (t) => {
+  const storageDir = await useTempStorage(t);
+  const { album, editToken } = await createAlbum();
+  const saved = await updateAlbum(album.id, editToken, {
+    nickname: "Mina",
+    revision: 0,
+    remove: [],
+    images: [{ panelId: "hero-left", bytes: PNG_BYTES }],
+  });
+  const mediaHash = saved.panels["hero-left"];
+  assert.ok(mediaHash);
+  assert.ok(saved.atlasId);
+
+  const albumMetadataPath = path.join(
+    storageDir,
+    "albums",
+    album.id,
+    "metadata.json",
+  );
+  const partyMetadataPath = path.join(
+    storageDir,
+    "parties",
+    saved.atlasId,
+    "metadata.json",
+  );
+  const albumMetadata = JSON.parse(await readFile(albumMetadataPath, "utf8"));
+  const partyMetadata = JSON.parse(await readFile(partyMetadataPath, "utf8"));
+  albumMetadata.album.expiresAt = "2000-01-01T00:00:00.000Z";
+  partyMetadata.expiresAt = "2000-01-01T00:00:00.000Z";
+  await writeFile(albumMetadataPath, JSON.stringify(albumMetadata, null, 2));
+  await writeFile(partyMetadataPath, JSON.stringify(partyMetadata, null, 2));
+
+  await assert.rejects(
+    () => readAlbumForEdit(album.id, editToken),
+    (error) => error instanceof StorageError && error.status === 410,
+  );
+  await assert.rejects(
+    () => storage.getPartyAtlas(saved.atlasId!),
+    (error) => error instanceof StorageError && error.status === 410,
+  );
+  await assert.rejects(
+    () => getMedia(album.id, mediaHash),
+    (error) => error instanceof StorageError && error.status === 410,
+  );
+
+  assert.deepEqual(await cleanupExpiredStorage(), {
+    albumsDeleted: 1,
+    atlasesDeleted: 1,
+  });
+  assert.equal(
+    await storage.storagePathExists(path.join(storageDir, "albums", album.id)),
+    false,
+  );
+  assert.equal(
+    await storage.storagePathExists(
+      path.join(storageDir, "parties", saved.atlasId),
+    ),
+    false,
   );
 });
 
@@ -620,3 +684,93 @@ async function recoverHeaderFromPng(bytes: Uint8Array) {
 
   return header;
 }
+
+test("expires access at 24 hours and removes albums and PNGs", async (t) => {
+  const dir = await useTempStorage(t);
+  const start = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now: start });
+  const created = await createAlbum();
+  const saved = await updateAlbum(created.album.id, created.editToken, {
+    nickname: "24시간", revision: 0, remove: [],
+    images: [{ panelId: "hero-left", bytes: PNG_BYTES }],
+  });
+  assert.equal(Date.parse(saved.expiresAt!), start + storage.RETENTION_MS);
+  t.mock.timers.setTime(start + storage.RETENTION_MS - 1);
+  await storage.getPartyAtlas(saved.atlasId!);
+  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 0, atlasesDeleted: 0 });
+  t.mock.timers.setTime(start + storage.RETENTION_MS);
+  const requests = [
+    () => readAlbumForEdit(saved.id, created.editToken),
+    () => getMedia(saved.id, saved.panels["hero-left"]!),
+    () => readPublicManifest(saved.id, "https://test.example"),
+    () => storage.getPartyAtlas(saved.atlasId!),
+    () => storage.resolveAtlasAlbums(saved.atlasId!),
+    () => updateAlbum(saved.id, created.editToken, { nickname: "연장", revision: 1, remove: [], images: [] }),
+  ];
+  for (const request of requests) {
+    await assert.rejects(request, (error: unknown) => error instanceof StorageError && error.status === 410);
+  }
+  const response = await partyRoute.GET(new Request("https://test.example"), { params: Promise.resolve({ hash: saved.atlasId! }) });
+  assert.equal(response.status, 410);
+  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 1, atlasesDeleted: 1 });
+  assert.equal(await storage.storagePathExists(path.join(dir, "albums", saved.id)), false);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", saved.atlasId!)), false);
+});
+
+test("save renews current PNG but old PNG and unused original are cleaned up", async (t) => {
+  const dir = await useTempStorage(t);
+  const start = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now: start });
+  const created = await createAlbum();
+  const first = await updateAlbum(created.album.id, created.editToken, { nickname: "A", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] });
+  t.mock.timers.setTime(start + storage.RETENTION_MS / 2);
+  const second = await updateAlbum(first.id, created.editToken, { nickname: "B", revision: 1, remove: [], images: [{ panelId: "hero-left", bytes: JPEG_BYTES }] });
+  assert.equal(await storage.storagePathExists(storage.getAlbumMediaPath(first.id, first.panels["hero-left"]!, "png")), false);
+  const orphan = path.join(dir, "albums", first.id, "media", "failed-upload.tmp");
+  await writeFile(orphan, "orphan");
+  t.mock.timers.setTime(start + storage.RETENTION_MS);
+  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 0, atlasesDeleted: 1 });
+  assert.equal(await storage.storagePathExists(orphan), false);
+  await storage.getPartyAtlas(second.atlasId!);
+  const third = await updateAlbum(first.id, created.editToken, { nickname: "C", revision: 2, remove: [], images: [] });
+  assert.equal(third.atlasId, second.atlasId);
+  assert.equal(Date.parse(third.expiresAt!), start + 2 * storage.RETENTION_MS);
+});
+
+test("shared PNG survives expired owner and abandoned draft cleanup", async (t) => {
+  const dir = await useTempStorage(t);
+  const start = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now: start });
+  const draft = await createAlbum();
+  const a = await createAlbum();
+  const b = await createAlbum();
+  const input = { nickname: "Shared", revision: 0, remove: [], images: [{ panelId: "hero-left" as const, bytes: PNG_BYTES }] };
+  const first = await updateAlbum(a.album.id, a.editToken, input);
+  t.mock.timers.setTime(start + 1000);
+  const second = await updateAlbum(b.album.id, b.editToken, input);
+  assert.equal(first.atlasId, second.atlasId);
+  t.mock.timers.setTime(start + storage.RETENTION_MS);
+  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 2, atlasesDeleted: 0 });
+  assert.equal(await storage.storagePathExists(path.join(dir, "albums", draft.album.id)), false);
+  await storage.getPartyAtlas(second.atlasId!);
+  assert.ok((await storage.resolveAtlasAlbums(second.atlasId!)).includes(b.album.id));
+  t.mock.timers.setTime(start + storage.RETENTION_MS + 1000);
+  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 1, atlasesDeleted: 1 });
+});
+
+test("legacy records use saved timestamp for retention", async (t) => {
+  const dir = await useTempStorage(t);
+  const created = await createAlbum();
+  const saved = await updateAlbum(created.album.id, created.editToken, { nickname: "Legacy", revision: 0, remove: [], images: [] });
+  const albumFile = path.join(dir, "albums", saved.id, "metadata.json");
+  const partyFile = path.join(dir, "parties", saved.atlasId!, "metadata.json");
+  const album = JSON.parse(await readFile(albumFile, "utf8"));
+  delete album.album.expiresAt;
+  album.album.updatedAt = new Date(Date.now() - storage.RETENTION_MS).toISOString();
+  await writeFile(albumFile, JSON.stringify(album));
+  const party = JSON.parse(await readFile(partyFile, "utf8"));
+  delete party.expiresAt;
+  party.createdAt = album.album.updatedAt;
+  await writeFile(partyFile, JSON.stringify(party));
+  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 1, atlasesDeleted: 1 });
+});

@@ -8,14 +8,14 @@ export function jsonError(error: unknown) {
   if (error instanceof StorageError) {
     return NextResponse.json(
       { error: error.message },
-      { status: error.status },
+      { status: error.status, headers: { "Cache-Control": "no-store" } },
     );
   }
 
   console.error(error);
   return NextResponse.json(
     { error: "서버 오류가 발생했습니다." },
-    { status: 500 },
+    { status: 500, headers: { "Cache-Control": "no-store" } },
   );
 }
 

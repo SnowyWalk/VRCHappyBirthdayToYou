@@ -63,6 +63,7 @@ export type Album = {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  expiresAt?: string;
   atlasId?: string;
   panelOrientations?: Partial<Record<PanelId, "landscape" | "portrait">>;
   panels: Record<PanelId, string | null>;

@@ -9,7 +9,7 @@
 - EC2 프로젝트 경로: `/home/ubuntu/VRCHappyBirthdayToYou`
 - NPM 공유 네트워크: `proxy`, 전달 대상: `http://birthday-world:3000`
 - NPM에서 Let's Encrypt 인증서, HTTP → HTTPS 강제 이동, HTTP/2를 설정했습니다.
-- 사진과 앨범은 `vrchappybirthdaytoyou_birthday-data` 볼륨에 저장됩니다. 기존 로컬 데이터는 자동 이관하지 않았습니다.
+- 사진과 앨범은 `vrchappybirthdaytoyou_birthday-data` 볼륨에 저장됩니다. 링크와 업로드 사진은 마지막 저장 후 24시간 동안 유지되고 앱 시작 시와 1분 주기 정리 작업으로 만료 데이터를 삭제합니다. 기존 로컬 데이터는 자동 이관하지 않았습니다.
 
 이 서버의 업데이트 명령:
 
