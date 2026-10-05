@@ -21,7 +21,9 @@ docker compose -f compose.yaml -f compose.npm.yaml up -d --build --wait
 
 배포 검증에서 HTTPS로 사진 8장과 유니코드 이름을 저장하고 2048×2048 PNG를 내려받았습니다. 컨테이너를 재생성한 뒤에도 앨범과 PNG의 SHA-256이 유지됨을 확인했습니다.
 
-현재 DNS는 Cloudflare 프록시를 통과합니다. Cloudflare Free/Pro의 요청 전체 업로드 제한은 100MB이므로 사진 여러 장의 합계가 이를 넘으면 NPM의 512MB 설정과 관계없이 거절될 수 있습니다. 8×60MB를 모두 허용하려면 `hbd` A 레코드를 EC2 IP로 지정하고 **DNS 전용**으로 설정하거나 업로드 요청을 분할해야 합니다. [Cloudflare 업로드 제한](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits).
+DNS 전용 연결 후에는 각 55MiB로 패딩한 정상 PNG 두 장을 합계 110MiB의 HTTPS multipart 요청으로 저장하는 검증도 통과했습니다. 테스트 앨범과 사진은 검증 후 삭제했습니다.
+
+Cloudflare에 `hbd` A 레코드를 `54.180.125.84`, **DNS 전용**으로 설정했습니다. TLS는 NPM의 Let's Encrypt 인증서가 처리합니다. Cloudflare Free/Pro의 요청 전체 업로드 제한(100MB)을 통과하지 않아 여러 장의 대용량 사진을 저장할 수 있습니다. 이 레코드를 프록싱으로 바꾸면 NPM의 512MB 설정과 관계없이 Cloudflare에서 거절될 수 있습니다. [Cloudflare 업로드 제한](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits).
 
 ## 최초 실행
 
