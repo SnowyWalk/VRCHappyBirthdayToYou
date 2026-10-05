@@ -53,7 +53,9 @@ function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled
           {PANELS.filter(p => p.id.includes(view.side)).map(p => {
             const filled = Boolean(photos[p.id]);
             const number = PANELS.findIndex(panel => panel.id === p.id) + 1;
-            const corner = view.panels.find(panel => panel.name === p.objectName)!.corners[2];
+            const corners = view.panels.find(panel => panel.name === p.objectName)!.corners;
+            const removeX = corners.reduce((sum, corner) => sum + corner.x, 0) / corners.length;
+            const removeY = Math.max(...corners.map(corner => corner.y)) + 8 / scale;
             return <Fragment key={p.id}><button type="button" data-panel-id={p.id} data-world-object={p.objectName}
               className={`scene-panel ${filled ? "populated" : ""} ${dropTarget === p.id && !disabled ? "drop-target" : ""}`}
               style={{ transform: panelTransform(p.objectName) }} disabled={disabled}
@@ -78,7 +80,7 @@ function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled
               {filled && <span className="panel-filled"><Check size={16} /></span>}
             </button>
               {filled && onRemove && <button type="button" className="panel-remove" disabled={disabled}
-                style={{ left: corner.x, top: corner.y, transform: `translate(-100%, -100%) scale(${1 / scale})`, transformOrigin: "bottom right" }}
+                style={{ left: removeX, top: removeY, transform: `translateX(-50%) scale(${1 / scale})`, transformOrigin: "top center" }}
                 aria-label={`${panelLocation(p.id)} 사진 제거`} onClick={() => onRemove(p.id)}><Trash2 size={16} /></button>}
             </Fragment>;
           })}

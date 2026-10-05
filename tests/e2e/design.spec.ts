@@ -117,6 +117,10 @@ test("clicking measured world texture positions stores photos in the correspondi
     await target.click({ position: { x: x - bounds.x, y: y - bounds.y } });
     await (await chooser).setFiles({ name: `${id}.png`, mimeType: "image/png", buffer });
     await expect(page.locator(`[data-panel-id="${id}"]`)).toHaveClass(/populated/);
+    const removeBounds = (await page.getByRole("button", { name: `${id.includes("left") ? "L" : "R"}${id.startsWith("hero") ? 1 : Number(id.slice(-1)) + 2} 사진 제거`, exact: true }).boundingBox())!;
+    expect(removeBounds.y).toBeGreaterThan(bounds.y + bounds.height);
+    expect(removeBounds.width).toBeGreaterThanOrEqual(44);
+    expect(removeBounds.y + removeBounds.height).toBeLessThanOrEqual(image.y + image.height);
   }
   await page.getByRole("button", { name: "저장하고 링크 만들기", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");

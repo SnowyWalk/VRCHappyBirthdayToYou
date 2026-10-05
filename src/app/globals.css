@@ -80,6 +80,16 @@ button:disabled { cursor: default; }
 .entry-content .create-button svg { order: 2; width: 20px; height: 20px; }
 .entry-content .load-button { color: var(--subtle); height: 44px; font-size: 14px; }
 .entry-controller > .error-message { text-align: center; }
+.recent-albums { margin-top: 24px; padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.recent-albums h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.recent-albums ul { margin: 0; padding: 0; list-style: none; }
+.recent-albums li { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
+.recent-albums li + li { border-top: 1px solid var(--border); }
+.recent-albums a { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.recent-albums a span, .recent-albums small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-albums a:hover { text-decoration: underline; }
+.recent-albums small { font-size: 11px; color: var(--subtle); }
+.recent-albums time, .recent-unsaved { flex-shrink: 0; font-size: 12px; color: var(--subtle); }
 .editor-heading { margin: 4px 0 20px; }
 .name-control { width: 100%; }
 .name-control label { display: block; margin-bottom: 8px; font-size: 12px; color: var(--subtle); }

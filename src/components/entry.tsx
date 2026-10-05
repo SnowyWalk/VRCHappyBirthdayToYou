@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowRight, FolderOpen, LoaderCircle } from "lucide-react";
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { parseAlbumInput, readResponse, rememberToken, recalledToken } from "@/lib/client";
+import { parseAlbumInput, readResponse, rememberAlbum, recalledToken, refreshRecentAlbums, readRecentAlbums, formatRelativeTime, type RecentAlbum } from "@/lib/client";
 import type { Album } from "@/lib/panels";
 import { WORLD_OVERVIEW } from "@/lib/world-view";
 
@@ -24,6 +25,16 @@ export function Entry() {
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [recent, setRecent] = useState<RecentAlbum[]>([]);
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    void refreshRecentAlbums().then(albums => {
+      if (!cancelled) { setRecent(albums); setNow(Date.now()); }
+    });
+    const timer = setInterval(() => { setRecent(readRecentAlbums()); setNow(Date.now()); }, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
   async function create() {
     setBusy(true);
     setError("");
@@ -32,7 +43,7 @@ export function Entry() {
         album: Album;
         editToken: string;
       }>(await fetch("/api/albums", { method: "POST" }));
-      rememberToken(album.id, editToken);
+      rememberAlbum(album, editToken);
       router.push(`/edit/${album.id}#key=${editToken}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "앨범을 만들지 못했어요.");
@@ -112,6 +123,18 @@ export function Entry() {
             </Button>
           </div>
         </section>
+        {recent.length > 0 && <section className="recent-albums" aria-label="최근 편집 링크">
+          <h2>최근 편집 링크</h2>
+          <ul>{recent.map(album => <li key={album.id}>
+            <Link href={`/edit/${album.id}#key=${recalledToken(album.id) ?? ""}`}>
+              <span>{album.nickname || album.id}</span>
+              <small>{album.nickname ? album.id : ""}</small>
+            </Link>
+            {album.revision > 0 ? <time dateTime={album.updatedAt} title={new Intl.DateTimeFormat("ko-KR", { dateStyle: "full", timeStyle: "long" }).format(new Date(album.updatedAt))}>
+              {formatRelativeTime(album.updatedAt, now)}
+            </time> : <span className="recent-unsaved">아직 저장하지 않음</span>}
+          </li>)}</ul>
+        </section>}
         {error && !open && (
           <p className="error-message" role="alert">
             {error}

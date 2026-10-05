@@ -18,7 +18,7 @@ import { MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "@/lib/upload-limits";
 import {
   copyText,
   readResponse,
-  rememberToken,
+  rememberAlbum,
   recalledToken,
   ResponseError,
   withNickname,
@@ -78,7 +78,7 @@ export function AlbumEditor({ id }: { id: string }) {
           }),
         );
         if (!cancelled) {
-          rememberToken(id, key);
+          rememberAlbum(loaded, key);
           setAlbum(loaded);
           setNickname(loaded.nickname);
           setDataUrl(publicUrl ?? "");
@@ -200,6 +200,7 @@ export function AlbumEditor({ id }: { id: string }) {
         }),
       );
       setAlbum(updated);
+      rememberAlbum(updated, token);
       setDataUrl(publicUrl ?? "");
       setNickname(updated.nickname);
       setFiles({});
