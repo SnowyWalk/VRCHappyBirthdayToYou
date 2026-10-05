@@ -2,6 +2,48 @@ import { test, expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
 import { randomBytes } from "node:crypto";
+import { writeFile, unlink } from "node:fs/promises";
+
+test("accepts an 8K source over 60MB and rejects excess pixels before decoding", async ({ page, request }, testInfo) => {
+  await page.addInitScript(() => {
+    const decode = HTMLImageElement.prototype.decode;
+    HTMLImageElement.prototype.decode = function () {
+      const root = document.documentElement;
+      root.dataset.photoDecodes = String(Number(root.dataset.photoDecodes || 0) + 1);
+      return decode.call(this);
+    };
+  });
+  const { album, editToken } = await (await request.post("/api/albums")).json();
+  const largePath = testInfo.outputPath("large-8k.png");
+  try {
+    await page.goto(`/edit/${album.id}#key=${editToken}`);
+    const large = await sharp({ create: { width: 7680, height: 4320, channels: 3, background: "#3e9abc" } }).png({ compressionLevel: 0 }).toBuffer();
+    expect(large.length).toBeGreaterThan(60 * 1024 * 1024);
+    await writeFile(largePath, large);
+    await chooseFileFrom(page, page.getByRole("button", { name: "1. 대표 사진 · 왼쪽, 비어 있음", exact: true }),
+      largePath);
+    await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
+    await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+    const saved = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
+    const photo = await (await request.get(`/media/${album.id}/${saved.album.panels["hero-left"]}`)).body();
+    const info = await sharp(photo).metadata();
+    expect([info.width, info.height]).toEqual([2048, 1152]);
+    expect(photo.length).toBeLessThan(8 * 1024 * 1024);
+    const excessive = Buffer.from(landscapeImage.buffer);
+    excessive.writeUInt32BE(16000, 16);
+    excessive.writeUInt32BE(9000, 20);
+    const decodes = await page.evaluate(() => document.documentElement.dataset.photoDecodes);
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "1. 대표 사진 · 왼쪽, 사진 설정됨", exact: true }).click();
+    await (await chooserPromise).setFiles({ name: "excessive.png", mimeType: "image/png", buffer: excessive });
+    await expect(page.getByRole("alert").filter({ hasText: "4천만 픽셀 이하" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.dataset.photoDecodes)).toBe(decodes);
+    await expect(page.locator(".scene-panel.populated")).toHaveCount(1);
+  } finally {
+    await unlink(largePath).catch(() => undefined);
+    await request.delete(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } });
+  }
+});
 
 test("resizes large source photos locally and preserves portrait direction and transparency", async ({ page, request }) => {
   const { album, editToken } = await (await request.post("/api/albums")).json();
@@ -55,7 +97,7 @@ const invalidRatioImage = await makeImage(120, 120, "#777777", "square.png");
 async function chooseFileFrom(
   page: Page,
   trigger: Locator,
-  file = landscapeImage,
+  file: string | typeof landscapeImage = landscapeImage,
 ) {
   const chooserPromise = page.waitForEvent("filechooser");
   await trigger.click();

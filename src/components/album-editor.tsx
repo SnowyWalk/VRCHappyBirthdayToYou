@@ -15,7 +15,6 @@ import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WorldScene } from "@/components/world-scene";
 import { PANELS, type Album, type PanelId } from "@/lib/panels";
-import { MAX_SOURCE_IMAGE_MB } from "@/lib/upload-limits";
 import { preparePhoto } from "@/lib/prepare-photo";
 import {
   copyText,
@@ -332,7 +331,7 @@ export function AlbumEditor({ id }: { id: string }) {
               }}
               disabled={busy}
             />
-            <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 사진당 {MAX_SOURCE_IMAGE_MB}MB까지 · 업로드 전 최대 2048px로 자동 축소 · 저장 후 24시간 보관</p>
+            <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 최대 4천만 픽셀 · 업로드 전 최대 2048px로 자동 축소 · 저장 후 24시간 보관</p>
             <p className="gallery-empty-note">사진을 넣지 않은 패널은 월드에서 자동으로 제거됩니다.</p>
           </section>
           <div className="controller-inspector">

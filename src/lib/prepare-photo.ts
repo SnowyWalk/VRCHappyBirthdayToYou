@@ -1,18 +1,17 @@
 import {
   MAX_IMAGE_BYTES,
   MAX_PHOTO_EDGE,
-  MAX_SOURCE_IMAGE_BYTES,
-  MAX_SOURCE_IMAGE_MB,
+  MAX_SOURCE_IMAGE_PIXELS,
 } from "./upload-limits";
+import { readPhotoSize } from "./photo-size";
 
 /** Decode, orient and resize locally. The original file never leaves the device. */
 export async function preparePhoto(file: File) {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
     throw new Error("JPG, PNG, WebP 사진만 선택할 수 있어요.");
   }
-  if (file.size > MAX_SOURCE_IMAGE_BYTES) {
-    throw new Error(`사진 한 장은 ${MAX_SOURCE_IMAGE_MB}MB 이하여야 해요.`);
-  }
+  const original = await readPhotoSize(file);
+  assertPixelLimit(original.width, original.height);
 
   const sourceUrl = URL.createObjectURL(file);
   const image = new Image();
@@ -22,6 +21,7 @@ export async function preparePhoto(file: File) {
     await image.decode();
     const width = image.naturalWidth;
     const height = image.naturalHeight;
+    assertPixelLimit(width, height);
     if (width * 9 !== height * 16 && width * 16 !== height * 9) {
       throw new Error(`가로 16:9 또는 세로 9:16 사진만 사용할 수 있어요. 선택한 사진은 ${width}×${height}px입니다. 사진을 자르거나 여백을 넣어 비율을 맞춰 주세요.`);
     }
@@ -56,6 +56,12 @@ export async function preparePhoto(file: File) {
       canvas.width = 0;
       canvas.height = 0;
     }
+  }
+}
+
+function assertPixelLimit(width: number, height: number) {
+  if (width * height > MAX_SOURCE_IMAGE_PIXELS) {
+    throw new Error(`사진은 4천만 픽셀 이하로 선택해 주세요. 선택한 사진은 ${width}×${height}px입니다. 해상도를 낮춘 뒤 다시 선택해 주세요.`);
   }
 }
 

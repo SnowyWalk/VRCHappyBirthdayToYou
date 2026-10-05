@@ -1,6 +1,5 @@
 // Source files stay on the device; only resized photos are uploaded.
-export const MAX_SOURCE_IMAGE_MB = 60;
-export const MAX_SOURCE_IMAGE_BYTES = MAX_SOURCE_IMAGE_MB * 1024 * 1024;
+export const MAX_SOURCE_IMAGE_PIXELS = 40_000_000;
 export const MAX_PHOTO_EDGE = 2048;
 export const MAX_IMAGE_MB = 8;
 export const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024;
