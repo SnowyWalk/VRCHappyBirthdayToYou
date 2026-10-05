@@ -376,7 +376,7 @@ test("publishes all eight panel positions with mixed directions", async ({ page,
   const shortcuts = page.locator(".scene-panel");
   for (let i = 0; i < 8; i++) {
     await chooseFileFrom(page, shortcuts.nth(i), i % 2 ? portraitImage : landscapeImage);
-    await expect(page.locator(".scene-instruction")).toContainText(`${i + 1} / 8`);
+    await expect(page.locator(".scene-panel.populated")).toHaveCount(i + 1);
   }
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
@@ -397,6 +397,50 @@ test("publishes all eight panel positions with mixed directions", async ({ page,
   }
   expect(activeCount).toBe(8);
   await page.screenshot({ path: "artifacts/screenshots/atlas-editor.png", fullPage: true });
+});
+
+test("drop assigns only the targeted panel and reveals the link after saving", async ({ page, request }) => {
+  const { album, editToken } = await (await request.post("/api/albums")).json();
+  await page.goto(`/edit/${album.id}#key=${editToken}`);
+  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await expect(page.locator(".world-link")).toHaveCount(0);
+  await expect(page.locator(".scene-end-labels")).toHaveCount(0);
+  await expect(page.locator(".scene-instruction")).not.toContainText("/ 8");
+  const panel = page.locator('[data-panel-id="memory-right-1"]');
+  async function drop(files: typeof landscapeImage[]) {
+    const transfer = await page.evaluateHandle(items => {
+      const transfer = new DataTransfer();
+      for (const item of items) transfer.items.add(new File([new Uint8Array(item.bytes)], item.name, { type: item.mimeType }));
+      return transfer;
+    }, files.map(file => ({ name: file.name, mimeType: file.mimeType, bytes: Array.from(file.buffer) })));
+    try {
+      await panel.dispatchEvent("dragover", { dataTransfer: transfer });
+      await expect(panel).toHaveClass(/drop-target/);
+      await panel.dispatchEvent("drop", { dataTransfer: transfer });
+      await expect(panel).not.toHaveClass(/drop-target/);
+    } finally { await transfer.dispose(); }
+  }
+  await drop([landscapeImage]);
+  await expect(panel).toHaveClass(/populated/);
+  await expect(page.locator(".scene-panel.populated")).toHaveCount(1);
+  await expect(page.locator(".world-link")).toHaveCount(0);
+  const firstPreview = await panel.locator("img").getAttribute("src");
+  await drop([invalidRatioImage]);
+  await expect(page.getByRole("alert").filter({ hasText: "16:9" })).toBeVisible();
+  await expect(panel.locator("img")).toHaveAttribute("src", firstPreview!);
+  await drop([landscapeImage, portraitImage]);
+  await expect(page.getByRole("alert").filter({ hasText: "한 장씩" })).toBeVisible();
+  await expect(panel.locator("img")).toHaveAttribute("src", firstPreview!);
+  await drop([portraitImage]);
+  await expect(panel.locator("img")).not.toHaveAttribute("src", firstPreview!);
+  await expect(page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+  await expect(page.locator(".world-link")).toBeVisible();
+  const saved = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
+  expect(Object.entries(saved.album.panels).filter(([, photo]) => photo).map(([id]) => id)).toEqual(["memory-right-1"]);
+  expect(saved.album.panelOrientations["memory-right-1"]).toBe("portrait");
+  expect((await request.get(await page.getByLabel("VRChat용 이미지 링크", { exact: true }).inputValue())).status()).toBe(200);
 });
 
 async function makeImage(

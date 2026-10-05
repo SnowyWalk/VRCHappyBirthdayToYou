@@ -46,6 +46,7 @@ export function AlbumEditor({ id }: { id: string }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadPanel = useRef<PanelId>("hero-left");
   const objectUrls = useRef(new Set<string>());
+  const choosingPhoto = useRef(false);
   const worldUrl = withNickname(dataUrl, nickname);
   const expiryText = album?.expiresAt
     ? new Intl.DateTimeFormat("ko-KR", {
@@ -115,9 +116,8 @@ export function AlbumEditor({ id }: { id: string }) {
           (album?.panels[p.id] ? `/media/${id}/${album.panels[p.id]}` : null),
     ]),
   );
-  const filled = Object.values(photos).filter(Boolean).length;
   async function choose(file: File | undefined, panel: PanelId) {
-    if (!file) return;
+    if (!file || busy || choosingPhoto.current) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
       setError("JPG, PNG, WebP 사진만 선택할 수 있어요.");
       return;
@@ -126,6 +126,7 @@ export function AlbumEditor({ id }: { id: string }) {
       setError(`사진 한 장은 ${MAX_IMAGE_MB}MB 이하여야 해요.`);
       return;
     }
+    choosingPhoto.current = true;
     setBusy(true);
     setCheckingPhoto(true);
     const url = URL.createObjectURL(file);
@@ -144,6 +145,7 @@ export function AlbumEditor({ id }: { id: string }) {
       setError(e instanceof Error && e.name !== "EncodingError" ? e.message : "사진을 읽지 못했어요. 올바른 JPG, PNG, WebP 파일을 선택해 주세요.");
       setBusy(false);
       setCheckingPhoto(false);
+      choosingPhoto.current = false;
       return;
     }
     if (previews[panel]) {
@@ -158,6 +160,7 @@ export function AlbumEditor({ id }: { id: string }) {
     setError("");
     setBusy(false);
     setCheckingPhoto(false);
+    choosingPhoto.current = false;
   }
   function remove(panel: PanelId) {
     if (previews[panel]) {
@@ -312,14 +315,20 @@ export function AlbumEditor({ id }: { id: string }) {
         <div className="controller-workspace">
           <section className="scene-workspace" aria-label="사진 패널 선택">
             <div className="scene-instruction">
-              <h2>사진을 넣을 패널을 누르세요.</h2>
-              <span>{filled} / 8 <span>사진</span></span>
+              <h2>패널을 누르거나 사진을 끌어 놓으세요.</h2>
             </div>
             <WorldScene
               orientations={{ ...album.panelOrientations, ...orientations }}
               photos={photos}
               onSelect={openPicker}
               onRemove={remove}
+              onDropPhoto={(panel, dropped) => {
+                if (dropped.length !== 1) {
+                  setError("패널 하나에 사진 한 장씩 끌어 놓아 주세요.");
+                  return;
+                }
+                void choose(dropped[0], panel);
+              }}
               disabled={busy}
             />
             <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 사진당 {MAX_IMAGE_MB}MB까지 · 저장 후 24시간 보관</p>
@@ -366,7 +375,7 @@ export function AlbumEditor({ id }: { id: string }) {
             </div>
           </div>
         </div>
-        <section className="world-link" aria-label="월드에 적용할 링크">
+        {dataUrl && <section className="world-link" aria-label="월드에 적용할 링크">
           <label htmlFor="world-url">
             월드에 붙여 넣을 링크{dataUrl && (Object.keys(files).length || removed.length) ? " · 새 사진은 저장 후 반영돼요" : ""}
             {expiryText ? ` · ${expiryText} 만료` : " · 저장 후 24시간 보관"}
@@ -390,7 +399,7 @@ export function AlbumEditor({ id }: { id: string }) {
               {copied === "data" ? "복사했어요" : "링크 복사"}
             </Button>
           </div>
-        </section>
+        </section>}
       </main>
     </div>
   );

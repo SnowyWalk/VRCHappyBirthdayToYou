@@ -38,9 +38,9 @@ test("creation is dominant and photo editing remains usable at desktop and mobil
     await expect(wall.locator(".world-render")).toHaveCSS("width", "1300px");
     const viewport = wall.locator(".scene-viewport");
     const maxScroll = await viewport.evaluate(element => element.scrollWidth - element.clientWidth);
-    await wall.getByRole("button", { name: /입구 쪽/ }).click();
+    await wall.getByRole("button", { name: side === "left" ? "왼쪽으로 이동" : "오른쪽으로 이동", exact: true }).click();
     await expect.poll(() => viewport.evaluate(element => Math.round(element.scrollLeft))).toBe(side === "left" ? 0 : maxScroll);
-    await wall.getByRole("button", { name: /무대 쪽/ }).click();
+    await wall.getByRole("button", { name: side === "left" ? "오른쪽으로 이동" : "왼쪽으로 이동", exact: true }).click();
     const capture = JSON.parse(await readFile(`artifacts/world-${side}.json`, "utf8"));
     expect(capture.landmark.text).toBe("HAPPY BIRTHDAY");
     expect(capture.landmark.bounds.top).toBeGreaterThan(300);

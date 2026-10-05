@@ -94,7 +94,6 @@ button:disabled { cursor: default; }
 .wall-view + .wall-view { border-top: 1px solid #4a415c; }
 .scene-view-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px; }
 .scene-view-heading h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.scene-end-labels { font-size: 12px; color: #b8a4bf; }
 .scene-navigation { display: none; }
 .scene-viewport { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .world-render { position: relative; overflow: hidden; }
@@ -102,6 +101,7 @@ button:disabled { cursor: default; }
 .world-canvas > img { pointer-events: none; user-select: none; }
 .scene-panel { position: absolute; top: 0; left: 0; width: 200px; height: 112.5px; transform-origin: 0 0; padding: 0; border: 3px solid #e8ecff; border-radius: 0; background: #101828dc; color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .scene-panel:hover { background: #234ca9d9; border-color: #fff; }
+.scene-panel.drop-target { background: #234ca9e6; border-color: #91d9ff; box-shadow: inset 0 0 0 5px #91d9ff, 0 0 20px #91d9ff; }
 .scene-panel:focus-visible { outline: 5px solid #fff; outline-offset: 4px; }
 .scene-panel:disabled { opacity: .6; }
 .scene-panel > img { object-fit: contain; }
@@ -136,10 +136,9 @@ button:disabled { cursor: default; }
   .controller-save { justify-content: space-between; }
 }
 @media(max-width: 768px) {
-  .scene-end-labels { display: none; }
   .scene-view-heading { padding: 8px 14px; }
   .scene-navigation { display: flex; gap: 8px; }
-  .scene-navigation button { display: flex; align-items: center; justify-content: center; gap: 4px; height: 44px; padding: 0 10px; border: 1px solid #6c7190; border-radius: 6px; background: transparent; color: #d6daf0; font-size: 12px; }
+  .scene-navigation button { display: flex; align-items: center; justify-content: center; gap: 4px; width: 44px; height: 44px; padding: 0 10px; border: 1px solid #6c7190; border-radius: 6px; background: transparent; color: #d6daf0; font-size: 12px; }
 }
 @media(max-width: 700px) {
   .entry-content { flex-direction: column; gap: 10px; padding: 18px; }

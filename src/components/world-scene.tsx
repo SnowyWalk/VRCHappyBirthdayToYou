@@ -10,12 +10,14 @@ type SceneProps = {
   orientations?: Partial<Record<PanelId, "landscape" | "portrait">>;
   onSelect?: (id: PanelId) => void;
   onRemove?: (id: PanelId) => void;
+  onDropPhoto?: (id: PanelId, files: File[]) => void;
   disabled?: boolean;
 };
 
-function WallView({ view, photos = {}, onSelect, onRemove, disabled }: SceneProps & { view: typeof WORLD_VIEWS[number] }) {
+function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled }: SceneProps & { view: typeof WORLD_VIEWS[number] }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(view.width);
+  const [dropTarget, setDropTarget] = useState<PanelId | null>(null);
   const left = view.side === "left";
   useEffect(() => {
     const element = viewport.current!;
@@ -39,10 +41,9 @@ function WallView({ view, photos = {}, onSelect, onRemove, disabled }: SceneProp
   return <section className="wall-view" data-world-side={view.side} aria-label={left ? "왼쪽 패널" : "오른쪽 패널"}>
     <div className="scene-view-heading">
       <h3>{left ? "왼쪽" : "오른쪽"}</h3>
-      <span className="scene-end-labels">{left ? "입구 ← → 무대" : "무대 ← → 입구"}</span>
       <div className="scene-navigation" aria-label={`${left ? "왼쪽" : "오른쪽"} 전경 이동`}>
-        <button type="button" onClick={() => move(!left)}><ChevronLeft size={15} />{left ? "입구 쪽" : "무대 쪽"}</button>
-        <button type="button" onClick={() => move(left)}>{left ? "무대 쪽" : "입구 쪽"}<ChevronRight size={15} /></button>
+        <button type="button" aria-label="왼쪽으로 이동" onClick={() => move(!left)}><ChevronLeft size={15} /></button>
+        <button type="button" aria-label="오른쪽으로 이동" onClick={() => move(left)}><ChevronRight size={15} /></button>
       </div>
     </div>
     <div className="scene-viewport" ref={viewport}>
@@ -54,9 +55,23 @@ function WallView({ view, photos = {}, onSelect, onRemove, disabled }: SceneProp
             const number = PANELS.findIndex(panel => panel.id === p.id) + 1;
             const corner = view.panels.find(panel => panel.name === p.objectName)!.corners[2];
             return <Fragment key={p.id}><button type="button" data-panel-id={p.id} data-world-object={p.objectName}
-              className={`scene-panel ${filled ? "populated" : ""}`}
+              className={`scene-panel ${filled ? "populated" : ""} ${dropTarget === p.id && !disabled ? "drop-target" : ""}`}
               style={{ transform: panelTransform(p.objectName) }} disabled={disabled}
               aria-label={`${number}. ${p.name}${filled ? ", 사진 설정됨" : ", 비어 있음"}`}
+              onDragOver={(event) => {
+                if (!event.dataTransfer.types.includes("Files")) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = disabled ? "none" : "copy";
+                if (!disabled) setDropTarget(p.id);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDropTarget(null);
+                if (!disabled) onDropPhoto?.(p.id, Array.from(event.dataTransfer.files));
+              }}
               onClick={() => onSelect?.(p.id)}>
               {filled ? <Image src={photos[p.id]!} alt="" fill unoptimized sizes="350px" draggable={false} /> : <Plus size={30} strokeWidth={2} />}
               <span className="panel-badge">{panelLocation(p.id)}</span>
@@ -74,7 +89,9 @@ function WallView({ view, photos = {}, onSelect, onRemove, disabled }: SceneProp
 }
 
 export function WorldScene(props: SceneProps) {
-  return <div className="world-scene" role="group" aria-label="사진 패널 번호">
+  return <div className="world-scene" role="group" aria-label="사진 패널 번호"
+    onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+    onDrop={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}>
     {WORLD_VIEWS.map(view => <WallView key={view.side} view={view} {...props} />)}
   </div>;
 }
