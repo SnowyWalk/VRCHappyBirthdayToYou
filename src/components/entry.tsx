@@ -139,8 +139,11 @@ export function Entry() {
           <h2>최근 편집 링크</h2>
           <ul>{recent.map(album => <li key={album.id}>
             <Link href={`/edit/${album.id}#key=${recalledToken(album.id) ?? ""}`}>
-              <span>{album.nickname || album.id}</span>
-              <small>{typeof album.photoCount === "number" ? `사진 ${album.photoCount}장` : ""}{album.nickname ? `${typeof album.photoCount === "number" ? " · " : ""}${album.id}` : ""}</small>
+              <div className="recent-title">
+                <span className="recent-name">{album.nickname.trim() || "(이름 없음)"}</span>
+                {typeof album.photoCount === "number" && <span className="recent-photo-count" title={`사진 ${album.photoCount}장 등록됨`}>({album.photoCount}/8)</span>}
+              </div>
+              <small>{album.id}</small>
             </Link>
             {album.revision > 0 ? <time dateTime={album.updatedAt} title={new Intl.DateTimeFormat("ko-KR", { dateStyle: "full", timeStyle: "long" }).format(new Date(album.updatedAt))}>
               {formatRelativeTime(album.updatedAt, now)}
