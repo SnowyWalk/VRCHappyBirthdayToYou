@@ -141,7 +141,7 @@ export function Entry() {
             <Link href={`/edit/${album.id}#key=${recalledToken(album.id) ?? ""}`}>
               <div className="recent-title">
                 <span className="recent-name">{album.nickname.trim() || "(이름 없음)"}</span>
-                {typeof album.photoCount === "number" && <span className="recent-photo-count" title={`사진 ${album.photoCount}장 등록됨`}>({album.photoCount}/8)</span>}
+                {typeof album.photoCount === "number" && <span className="recent-photo-count" title={`사진 ${album.photoCount}장 등록됨`}>{album.photoCount}/8</span>}
               </div>
               <small>{album.id}</small>
             </Link>

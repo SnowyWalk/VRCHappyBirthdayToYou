@@ -23,7 +23,7 @@ test("recent links restore legacy tokens, retain the latest five issuances and r
   for (let index = 0; index < 5; index++) {
     const record = records[5 - index];
     await expect(recent.getByRole("link").nth(index)).toContainText(record.album.nickname);
-    await expect(recent.getByRole("link").nth(index).locator(".recent-photo-count")).toHaveText(index === 0 ? "(1/8)" : "(0/8)");
+    await expect(recent.getByRole("link").nth(index).locator(".recent-photo-count")).toHaveText(index === 0 ? "1/8" : "0/8");
     await expect(recent.getByRole("link").nth(index)).toHaveAttribute("href", `/edit/${record.album.id}#key=${record.editToken}`);
     await expect(recent.locator("time").nth(index)).toHaveAttribute("datetime", record.album.updatedAt);
     await expect(recent.locator("time").nth(index)).toHaveText("방금 전");
@@ -48,7 +48,7 @@ test("recent links restore legacy tokens, retain the latest five issuances and r
   await page.getByRole("button", { name: "변경 사항 저장", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   await page.goto("/");
-  await expect(recent.getByRole("link").first().locator(".recent-photo-count")).toHaveText("(0/8)");
+  await expect(recent.getByRole("link").first().locator(".recent-photo-count")).toHaveText("0/8");
 });
 
 test("new draft appears as an editable recent issuance without pretending it was saved", async ({ page }) => {
@@ -59,7 +59,7 @@ test("new draft appears as an editable recent issuance without pretending it was
   await page.goto("/");
   const recent = page.getByRole("region", { name: "최근 편집 링크", exact: true });
   await expect(recent.getByRole("link")).toHaveCount(1);
-  await expect(recent.getByRole("link").locator(".recent-photo-count")).toHaveText("(0/8)");
+  await expect(recent.getByRole("link").locator(".recent-photo-count")).toHaveText("0/8");
   await expect(recent.getByRole("link").locator(".recent-name")).toHaveText("(이름 없음)");
   await page.setViewportSize({ width: 360, height: 780 });
   await expect(recent.locator(".recent-photo-count")).toBeVisible();
