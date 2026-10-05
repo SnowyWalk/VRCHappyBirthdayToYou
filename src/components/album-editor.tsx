@@ -15,7 +15,8 @@ import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WorldScene } from "@/components/world-scene";
 import { PANELS, type Album, type PanelId } from "@/lib/panels";
-import { MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "@/lib/upload-limits";
+import { MAX_SOURCE_IMAGE_MB } from "@/lib/upload-limits";
+import { preparePhoto } from "@/lib/prepare-photo";
 import {
   copyText,
   readResponse,
@@ -131,30 +132,16 @@ export function AlbumEditor({ id }: { id: string }) {
   );
   async function choose(file: File | undefined, panel: PanelId) {
     if (!file || busy || choosingPhoto.current) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setError("JPG, PNG, WebP 사진만 선택할 수 있어요.");
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError(`사진 한 장은 ${MAX_IMAGE_MB}MB 이하여야 해요.`);
-      return;
-    }
     choosingPhoto.current = true;
     setBusy(true);
     setCheckingPhoto(true);
-    const url = URL.createObjectURL(file);
+    let url: string;
     try {
-      const image = new window.Image();
-      image.src = url;
-      await image.decode();
-      const width = image.naturalWidth;
-      const height = image.naturalHeight;
-      if (width * 9 !== height * 16 && width * 16 !== height * 9) {
-        throw new Error(`가로 16:9 또는 세로 9:16 사진만 사용할 수 있어요. 선택한 사진은 ${width}×${height}px입니다. 사진을 자르거나 여백을 넣어 비율을 맞춰 주세요.`);
-      }
-      setOrientations(prev => ({ ...prev, [panel]: width > height ? "landscape" : "portrait" }));
+      const prepared = await preparePhoto(file);
+      file = prepared.file;
+      url = URL.createObjectURL(file);
+      setOrientations(prev => ({ ...prev, [panel]: prepared.orientation }));
     } catch (e) {
-      URL.revokeObjectURL(url);
       setError(e instanceof Error && e.name !== "EncodingError" ? e.message : "사진을 읽지 못했어요. 올바른 JPG, PNG, WebP 파일을 선택해 주세요.");
       setBusy(false);
       setCheckingPhoto(false);
@@ -345,7 +332,7 @@ export function AlbumEditor({ id }: { id: string }) {
               }}
               disabled={busy}
             />
-            <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 사진당 {MAX_IMAGE_MB}MB까지 · 저장 후 24시간 보관</p>
+            <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 사진당 {MAX_SOURCE_IMAGE_MB}MB까지 · 업로드 전 최대 2048px로 자동 축소 · 저장 후 24시간 보관</p>
             <p className="gallery-empty-note">사진을 넣지 않은 패널은 월드에서 자동으로 제거됩니다.</p>
           </section>
           <div className="controller-inspector">

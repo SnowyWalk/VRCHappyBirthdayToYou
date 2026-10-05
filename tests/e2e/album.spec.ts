@@ -1,6 +1,52 @@
 import { test, expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
+import { randomBytes } from "node:crypto";
+
+test("resizes large source photos locally and preserves portrait direction and transparency", async ({ page, request }) => {
+  const { album, editToken } = await (await request.post("/api/albums")).json();
+  try {
+    await page.goto(`/edit/${album.id}#key=${editToken}`);
+    const original = await sharp(randomBytes(3840 * 2160 * 3), {
+      raw: { width: 3840, height: 2160, channels: 3 },
+    }).png({ compressionLevel: 0 }).toBuffer();
+    expect(original.length).toBeGreaterThan(8 * 1024 * 1024);
+    await chooseFileFrom(page, page.getByRole("button", { name: "1. 대표 사진 · 왼쪽, 비어 있음", exact: true }),
+      { name: "4k.png", mimeType: "image/png", buffer: original });
+    const portrait = await sharp({ create: { width: 3840, height: 2160, channels: 3, background: "#5074d8" } })
+      .jpeg().withMetadata({ orientation: 6 }).toBuffer();
+    await chooseFileFrom(page, page.getByRole("button", { name: "2. 대표 사진 · 오른쪽, 비어 있음", exact: true }),
+      { name: "rotated.jpg", mimeType: "image/jpeg", buffer: portrait });
+    const transparent = await sharp({ create: { width: 160, height: 90, channels: 4, background: { r: 100, g: 50, b: 20, alpha: 0.5 } } })
+      .png().toBuffer();
+    await chooseFileFrom(page, page.getByRole("button", { name: "3. 갤러리 · 왼쪽 01, 비어 있음", exact: true }),
+      { name: "alpha.png", mimeType: "image/png", buffer: transparent });
+    await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
+    await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+    const saved = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
+    for (const [panel, width, height] of [["hero-left", 2048, 1152], ["hero-right", 1152, 2048], ["memory-left-0", 160, 90]] as const) {
+      const media = await request.get(`/media/${album.id}/${saved.album.panels[panel]}`);
+      const bytes = await media.body();
+      const metadata = await sharp(bytes).metadata();
+      expect(metadata.width).toBe(width);
+      expect(metadata.height).toBe(height);
+      expect(metadata.format).toBe("webp");
+      expect(bytes.length).toBeLessThan(8 * 1024 * 1024);
+      expect(metadata.exif).toBeUndefined();
+      if (panel === "hero-left") expect(bytes.length).toBeLessThan(original.length / 5);
+      if (panel === "memory-left-0") {
+        const pixel = await sharp(bytes).raw().toBuffer();
+        expect(pixel[3]).toBeGreaterThan(120);
+        expect(pixel[3]).toBeLessThan(135);
+      }
+    }
+    await page.reload();
+    await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+    await expect(page.getByRole("button", { name: "1. 대표 사진 · 왼쪽, 사진 설정됨", exact: true })).toBeVisible();
+  } finally {
+    await request.delete(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } });
+  }
+});
 
 const landscapeImage = await makeImage(160, 90, "#c94b6d", "landscape.png");
 const portraitImage = await makeImage(90, 160, "#5074d8", "portrait.jpg");

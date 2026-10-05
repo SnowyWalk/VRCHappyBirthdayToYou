@@ -416,7 +416,7 @@ test("serializes concurrent saves so only one same-revision update succeeds", as
   );
 });
 
-test("accepts a multi-photo 4K upload above the old 65MB request limit", async (t) => {
+test("rejects unprocessed 4K originals above the resized photo limit", async (t) => {
   await useTempStorage(t);
   const { album, editToken } = await createAlbum();
   const raw = randomFillSync(Buffer.alloc(3840 * 2160 * 3));
@@ -434,31 +434,27 @@ test("accepts a multi-photo 4K upload above the old 65MB request limit", async (
   const response = await albumRoute.PUT(new Request(`http://localhost/api/albums/${album.id}`, {
     method: "PUT", headers: { authorization: `Bearer ${editToken}` }, body: form,
   }), { params: Promise.resolve({ id: album.id }) });
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 413);
   const saved = await readAlbumForEdit(album.id, editToken);
   const hashes = Object.values(saved.panels).filter(Boolean);
-  assert.equal(hashes.length, 3);
-  assert.equal(new Set(hashes).size, 1);
-  const published = await storage.getPartyAtlas(saved.atlasId!);
-  const info = await sharp(published.bytes).metadata();
-  assert.equal(info.width, 2048);
-  assert.equal(info.height, 2048);
+  assert.equal(hashes.length, 0);
+  assert.equal(saved.revision, 0);
 });
 
-test("enforces 60MB per photo and 481MB per request", async (t) => {
+test("enforces 8MB per uploaded photo and 65MB per request", async (t) => {
   await useTempStorage(t);
-  const large = new Uint8Array(60 * 1024 * 1024 + 1);
+  const large = new Uint8Array(8 * 1024 * 1024 + 1);
   large.set(PNG_BYTES.subarray(0, 8));
   assert.equal(storage.detectImage(large.subarray(0, large.length - 1)).size, large.length - 1);
-  assert.throws(() => storage.detectImage(large), error => error instanceof StorageError && error.status === 413 && error.message.includes("60MB"));
+  assert.throws(() => storage.detectImage(large), error => error instanceof StorageError && error.status === 413 && error.message.includes("8MB"));
   const { album, editToken } = await createAlbum();
   const response = await albumRoute.PUT(new Request(`http://localhost/api/albums/${album.id}`, {
     method: "PUT",
-    headers: { authorization: `Bearer ${editToken}`, "content-length": String(481 * 1024 * 1024 + 1) },
+    headers: { authorization: `Bearer ${editToken}`, "content-length": String(65 * 1024 * 1024 + 1) },
     body: "too large",
   }), { params: Promise.resolve({ id: album.id }) });
   assert.equal(response.status, 413);
-  assert.match((await response.json()).error, /481MB/);
+  assert.match((await response.json()).error, /65MB/);
   assert.equal((await readAlbumForEdit(album.id, editToken)).revision, 0);
 });
 

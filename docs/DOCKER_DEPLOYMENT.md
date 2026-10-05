@@ -53,10 +53,10 @@ docker compose -f compose.yaml -f compose.npm.yaml up -d --build
 
 NPM에서 Forward Hostname은 `birthday-world`, Forward Port는 `3000`, Scheme은 `http`로 설정합니다. NPM 컨테이너의 localhost는 앱 컨테이너를 가리키지 않습니다. 외부 네트워크는 앱 실행 전에 존재해야 하며 앱 Compose는 NPM 자체를 수정하지 않습니다.
 
-NPM Advanced 설정에는 최대 8×60MB 업로드가 통과하도록 다음 값을 사용합니다.
+브라우저가 사진을 최대 2048px로 축소한 뒤 전송합니다. 서버 제한은 사진당 8MB, 요청 전체 65MB로 Cloudflare Free/Pro의 100MB 제한보다 작습니다. Cloudflare DNS 프록시를 사용할 수 있습니다. VRChat의 PNG 요청에는 브라우저 확인이나 CAPTCHA를 적용하지 마세요. NPM Advanced 설정은 다음 값을 권장합니다.
 
 ```nginx
-client_max_body_size 512m;
+client_max_body_size 65m;
 proxy_read_timeout 300s;
 proxy_send_timeout 300s;
 ```
