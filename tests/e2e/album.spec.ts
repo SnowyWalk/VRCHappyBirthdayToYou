@@ -17,6 +17,7 @@ test("accepts an 8K source over 60MB and rejects excess pixels before decoding",
   const largePath = testInfo.outputPath("large-8k.png");
   try {
     await page.goto(`/edit/${album.id}#key=${editToken}`);
+    await continueToPhotos(page);
     const large = await sharp({ create: { width: 7680, height: 4320, channels: 3, background: "#3e9abc" } }).png({ compressionLevel: 0 }).toBuffer();
     expect(large.length).toBeGreaterThan(60 * 1024 * 1024);
     await writeFile(largePath, large);
@@ -24,6 +25,7 @@ test("accepts an 8K source over 60MB and rejects excess pixels before decoding",
       largePath);
     await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
     await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+    await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
     const saved = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
     const photo = await (await request.get(`/media/${album.id}/${saved.album.panels["hero-left"]}`)).body();
     const info = await sharp(photo).metadata();
@@ -49,6 +51,7 @@ test("resizes large source photos locally and preserves portrait direction and t
   const { album, editToken } = await (await request.post("/api/albums")).json();
   try {
     await page.goto(`/edit/${album.id}#key=${editToken}`);
+    await continueToPhotos(page);
     const original = await sharp(randomBytes(3840 * 2160 * 3), {
       raw: { width: 3840, height: 2160, channels: 3 },
     }).png({ compressionLevel: 0 }).toBuffer();
@@ -119,11 +122,43 @@ async function chooseFileWithKeyboard(
   await expect(page.getByRole("status")).toHaveText("저장하지 않은 변경 사항");
 }
 
+async function continueToPhotos(page: Page, name?: string) {
+  await expect(page.getByRole("button", { name: "1. 이름 입력", exact: true })).toBeVisible();
+  await expect(nameField(page)).toBeVisible();
+  if (name !== undefined) await nameField(page).fill(name);
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await expect(page.getByRole("button", { name: "2. 사진 등록", exact: true })).toBeEnabled();
+  await expect(page.locator(".scene-panel").first()).toBeVisible();
+}
+
+function nameField(page: Page) {
+  return page.getByRole("textbox", { name: /생일자의 이름/ });
+}
+
+async function openNameStep(page: Page) {
+  await page.getByRole("button", { name: "1. 이름 입력", exact: true }).click();
+  await expect(nameField(page)).toBeVisible();
+}
+
+async function openPhotoStep(page: Page) {
+  await page.getByRole("button", { name: "2. 사진 등록", exact: true }).click();
+  await expect(page.locator(".scene-panel").first()).toBeVisible();
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+}
+
 test("concurrent edits preserve the first save and allow explicit reload", async ({ page, request }) => {
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
-  await page.getByLabel("생일자의 이름").fill("이 브라우저의 수정");
+  await expect(nameField(page)).toBeVisible();
+  await nameField(page).fill("이 브라우저의 수정");
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
   const otherSave = await request.put(`/api/albums/${album.id}`, {
     headers: { Authorization: `Bearer ${editToken}` },
     multipart: { nickname: "먼저 저장한 이름", revision: "0", remove: "[]" },
@@ -131,11 +166,87 @@ test("concurrent edits preserve the first save and allow explicit reload", async
   expect(otherSave.status()).toBe(200);
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "이미 변경" })).toBeVisible();
-  await expect(page.getByLabel("생일자의 이름")).toHaveValue("이 브라우저의 수정");
+  await expect(page.locator(".scene-panel").first()).toBeVisible();
+  await expect(page.locator(".name-summary strong")).toHaveText("이 브라우저의 수정");
   page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "최신 내용 불러오기", exact: true }).click();
-  await expect(page.getByLabel("생일자의 이름")).toHaveValue("먼저 저장한 이름");
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+  await openNameStep(page);
+  await expect(nameField(page)).toHaveValue("먼저 저장한 이름");
+});
+
+test("step flow focuses each task, preserves edits and hides stale links", async ({
+  page,
+  request,
+}) => {
+  const { album, editToken } = await (await request.post("/api/albums")).json();
+  await page.goto(`/edit/${album.id}#key=${editToken}`);
+  await expect(nameField(page)).toBeFocused();
+  await expect(page.getByRole("button", { name: "2. 사진 등록", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
+  await page.screenshot({ path: "artifacts/screenshots/step-name-desktop.png", fullPage: true });
+
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "사진을 등록하세요.", exact: true })).toBeFocused();
+  await expect(nameField(page)).not.toBeVisible();
+  await chooseFileFrom(page, page.locator('[data-panel-id="hero-left"]'), landscapeImage);
+  await expect(page.locator('[data-panel-id="hero-left"]')).toHaveClass(/populated/);
+  await page.screenshot({ path: "artifacts/screenshots/step-photos-desktop.png", fullPage: true });
+
+  await openNameStep(page);
+  await expect(nameField(page)).toBeFocused();
+  await nameField(page).fill("나쁜\u0001이름");
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "제어 문자" })).toBeVisible();
+  await expect(nameField(page)).toBeVisible();
+  await nameField(page).fill("테스트 생일");
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await expect(page.locator('[data-panel-id="hero-left"]')).toHaveClass(/populated/);
+
+  await page.getByRole("button", { name: "저장하고 링크 만들기", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "링크를 복사하세요.", exact: true })).toBeFocused();
+  await expect(page.locator(".world-link")).toBeVisible();
+  await expect(page.locator(".scene-workspace")).not.toBeVisible();
+  await page.screenshot({ path: "artifacts/screenshots/step-link-desktop.png", fullPage: true });
+  const firstLink = await page.getByLabel("VRChat용 이미지 링크", { exact: true }).inputValue();
+
+  await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
+  await expect(page.locator('[data-panel-id="hero-left"]')).toHaveClass(/populated/);
+  await openNameStep(page);
+  await nameField(page).fill("테스트 생일 수정");
+  await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
+  await expect(page.locator(".world-link")).not.toBeVisible();
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "변경 사항 저장", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+  const secondLink = await page.getByLabel("VRChat용 이미지 링크", { exact: true }).inputValue();
+  expect(new URL(secondLink).pathname).toBe(new URL(firstLink).pathname);
+  expect(new URL(secondLink).searchParams.get("name")).toBe("테스트 생일 수정");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "artifacts/screenshots/step-link-mobile.png", fullPage: true });
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "테마 전환", exact: true }).click();
+  await expect(page.getByLabel("VRChat용 이미지 링크", { exact: true })).toHaveCSS("color", "rgb(237, 230, 244)");
+  await expect(page.getByRole("button", { name: "사진 수정하기", exact: true })).toHaveCSS("background-color", "rgb(35, 29, 43)");
+  await page.screenshot({ path: "artifacts/screenshots/step-link-dark-mobile.png", fullPage: true });
+  await expectNoHorizontalOverflow(page);
+
+  await openNameStep(page);
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: "artifacts/screenshots/step-name-dark-mobile.png", fullPage: true });
+  await openPhotoStep(page);
+  await expectNoHorizontalOverflow(page);
+  await page.locator('[data-world-side="left"]').getByRole("button", { name: "패널 보기", exact: true }).click();
+  await expect.poll(async () => {
+    const panel = await page.locator('[data-panel-id="hero-left"]').boundingBox();
+    return panel !== null && panel.x >= 14 && panel.x + panel.width <= 376;
+  }).toBe(true);
+  const saveBounds = await page.locator(".controller-save").boundingBox();
+  expect(saveBounds!.y + saveBounds!.height).toBeLessThanOrEqual(844);
+  await page.screenshot({ path: "artifacts/screenshots/step-photos-dark-mobile.png", fullPage: true });
+
+  await request.delete(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } });
 });
 
 test("create, select real scene panel, save repeatedly, copy and load", async ({
@@ -157,10 +268,11 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
     fullPage: true,
   });
   await page.getByRole("button", { name: "새로 만들기" }).click();
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await expect(nameField(page)).toBeVisible();
   const editLink = page.url();
   const id = new URL(editLink).pathname.split("/").pop()!;
-  await page.getByLabel("생일자의 이름").fill("멜비의 생일");
+  await nameField(page).fill("멜비의 생일");
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
   await chooseFileFrom(
     page,
     page.getByRole("button", {
@@ -173,6 +285,8 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
     .getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true })
     .click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+  await expect(page.locator(".world-link")).toBeVisible();
+  await expect(page.locator(".scene-workspace")).not.toBeVisible();
   let manifest = await (await request.get(`/data/${id}`)).json();
   expect(manifest.nickname).toBe("멜비의 생일");
   expect(manifest.revision).toBe(1);
@@ -187,6 +301,8 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
   const firstAtlasBytes = await firstAtlas.body();
   const mediaUrl = manifest.panels[0].url;
   expect((await request.get(mediaUrl)).status()).toBe(200);
+  await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
+  await expect(page.locator(".scene-panel").first()).toBeVisible();
   await chooseFileFrom(
     page,
     page.getByRole("button", {
@@ -199,6 +315,7 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
     .getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true })
     .click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+  await expect(page.locator(".world-link")).toBeVisible();
   manifest = await (await request.get(`/data/${id}`)).json();
   expect(manifest.revision).toBe(2);
   expect(manifest.panels).toHaveLength(2);
@@ -223,8 +340,16 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
   await page.getByLabel("앨범 링크 또는 UUID").fill(editLink);
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
-  await expect(page.getByLabel("생일자의 이름")).toHaveValue("멜비의 생일");
+  await expect(page.locator(".scene-panel").first()).toBeVisible();
+  await expect(nameField(page)).not.toBeVisible();
+  await openNameStep(page);
+  await expect(nameField(page)).toHaveValue("멜비의 생일");
+  await openPhotoStep(page);
   expect(page.url()).toContain(id);
+  await page.getByRole("button", { name: "저장하고 링크 만들기", exact: true }).click();
+  await expect(page.locator(".world-link")).toBeVisible();
+  expect((await (await request.get(`/data/${id}`)).json()).revision).toBe(2);
+  await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
   await page.getByRole("button", { name: "L1 사진 제거" }).click();
   await page
     .getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true })
@@ -238,17 +363,14 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
     path: "test-results/editor-mobile.png",
     fullPage: true,
   });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true);
+  await expectNoHorizontalOverflow(page);
   const other = await context.browser()!.newContext();
   const otherPage = await other.newPage();
   await otherPage.goto(editLink);
-  await expect(otherPage.getByLabel("생일자의 이름")).toHaveValue(
-    "멜비의 생일",
-  );
+  await expect(otherPage.locator(".scene-panel").first()).toBeVisible();
+  await expect(nameField(otherPage)).not.toBeVisible();
+  await openNameStep(otherPage);
+  await expect(nameField(otherPage)).toHaveValue("멜비의 생일");
   await other.close();
   expect(errors).toEqual([]);
 });
@@ -259,8 +381,7 @@ test("keyboard scene selection and mobile numbered fallback target the chosen sl
 }) => {
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
-  await page.getByLabel("생일자의 이름").fill("키보드와 모바일 선택");
+  await continueToPhotos(page, "키보드와 모바일 선택");
 
   await chooseFileWithKeyboard(
     page,
@@ -278,6 +399,7 @@ test("keyboard scene selection and mobile numbered fallback target the chosen sl
     "Memory -1 0",
   ]);
 
+  await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   const shortcutGroup = page.getByRole("group", { name: "사진 패널 번호" });
   await expect(shortcutGroup).toBeVisible();
@@ -304,6 +426,7 @@ test("keyboard scene selection and mobile numbered fallback target the chosen sl
     "Memory -1 1",
   ]);
 
+  await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
   await page.getByRole("button", { name: "L3 사진 제거" }).click();
   await page
     .getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true })
@@ -348,7 +471,7 @@ test("rejects photos that are not exact 16:9 or 9:16 before save", async ({
 }) => {
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await continueToPhotos(page);
 
   const chooserPromise = page.waitForEvent("filechooser");
   await page
@@ -367,32 +490,42 @@ test("rejects photos that are not exact 16:9 or 9:16 before save", async ({
   expect(manifest.panels).toHaveLength(0);
 });
 
-test("nickname updates the displayed and copied URL immediately and reuses the PNG", async ({ page, context, request }) => {
+test("nickname changes hide stale links until save and reuse the existing PNG", async ({ page, context, request }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
-  await page.getByLabel("생일자의 이름").fill("첫 이름");
+  await continueToPhotos(page, "첫 이름");
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const linkField = page.getByLabel("VRChat용 이미지 링크", { exact: true });
   const original = new URL(await linkField.inputValue());
   const originalBytes = await (await request.get(original.href)).body();
   const name = "멜비 ♡ + & ? # / 🎂";
-  await page.getByLabel("생일자의 이름").fill(name);
-  const updated = new URL(await linkField.inputValue());
-  expect(updated.pathname).toBe(original.pathname);
-  expect(updated.searchParams.get("name")).toBe(name);
-  await page.getByRole("button", { name: "VRChat용 이미지 링크 복사", exact: true }).click();
-  expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).searchParams.get("name")).toBe(name);
+  await openNameStep(page);
+  await nameField(page).fill(name);
+  await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
+  await expect(page.locator(".world-link")).not.toBeVisible();
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
+  const updated = new URL(await linkField.inputValue());
   expect(new URL(await linkField.inputValue()).pathname).toBe(original.pathname);
+  expect(updated.searchParams.get("name")).toBe(name);
   expect(await (await request.get(updated.href)).body()).toEqual(originalBytes);
+  await page.getByRole("button", { name: "VRChat용 이미지 링크 복사", exact: true }).click();
+  expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).searchParams.get("name")).toBe(name);
   await page.reload();
-  await expect(page.getByLabel("생일자의 이름")).toHaveValue(name);
+  await expect(page.locator(".scene-panel").first()).toBeVisible();
+  await openNameStep(page);
+  await expect(nameField(page)).toHaveValue(name);
+  await page.getByRole("button", { name: "3. 링크 복사", exact: true }).click();
   expect(new URL(await linkField.inputValue()).searchParams.get("name")).toBe(name);
-  await page.getByLabel("생일자의 이름").fill("");
+  await openNameStep(page);
+  await nameField(page).fill("");
+  await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   expect(new URL(await linkField.inputValue()).searchParams.get("name")).toBe("");
 });
 
@@ -407,7 +540,7 @@ test("copies without Clipboard API and selects the link when copying is blocked"
   });
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  await page.getByLabel("생일자의 이름").fill("멜비 ♡ 🎂");
+  await continueToPhotos(page, "멜비 ♡ 🎂");
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const field = page.getByLabel("VRChat용 이미지 링크", { exact: true });
@@ -426,7 +559,8 @@ test("copies without Clipboard API and selects the link when copying is blocked"
 test("Load accepts a world PNG URL with encoded nickname and preserves edit authorization", async ({ page, context, request }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "새로 만들기", exact: true }).click();
-  await page.getByLabel("생일자의 이름").fill("설보&pea");
+  await nameField(page).fill("설보&pea");
+  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const originalEdit = page.url();
@@ -437,7 +571,9 @@ test("Load accepts a world PNG URL with encoded nickname and preserves edit auth
   await page.getByLabel("앨범 링크 또는 UUID").fill(worldLink);
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
   await expect(page).toHaveURL(originalEdit);
-  await expect(page.getByLabel("생일자의 이름")).toHaveValue("설보&pea");
+  await expect(page.locator(".scene-panel").first()).toBeVisible();
+  await openNameStep(page);
+  await expect(nameField(page)).toHaveValue("설보&pea");
   const hash = new URL(worldLink).pathname.split("/")[2];
   expect((await request.get(`/api/albums/resolve?atlas=${"0".repeat(64)}`)).status()).toBe(404);
   expect((await request.get("/api/albums/resolve?atlas=../bad")).status()).toBe(400);
@@ -460,7 +596,7 @@ test("Load accepts a world PNG URL with encoded nickname and preserves edit auth
 test("publishes all eight panel positions with mixed directions", async ({ page, request }) => {
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await continueToPhotos(page);
   const shortcuts = page.locator(".scene-panel");
   for (let i = 0; i < 8; i++) {
     await chooseFileFrom(page, shortcuts.nth(i), i % 2 ? portraitImage : landscapeImage);
@@ -490,10 +626,11 @@ test("publishes all eight panel positions with mixed directions", async ({ page,
 test("drop assigns only the targeted panel and reveals the link after saving", async ({ page, request }) => {
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await continueToPhotos(page);
   await expect(page.locator(".world-link")).toHaveCount(0);
   await expect(page.locator(".scene-end-labels")).toHaveCount(0);
-  await expect(page.locator(".scene-instruction")).not.toContainText("/ 8");
+  await expect(page.locator(".scene-instruction")).toHaveCount(0);
+  await expect(page.locator(".photo-step-heading")).not.toContainText("/ 8");
   const panel = page.locator('[data-panel-id="memory-right-1"]');
   async function drop(files: typeof landscapeImage[]) {
     const transfer = await page.evaluateHandle(items => {

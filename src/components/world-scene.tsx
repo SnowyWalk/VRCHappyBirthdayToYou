@@ -37,11 +37,18 @@ function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled
     element.scrollTo({ left: toStage ? stage : entrance,
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
+  function showPanel() {
+    const panel = view.panels.find(panel => panel.name.startsWith("Hero"))!;
+    const center = panel.corners.reduce((sum, corner) => sum + corner.x, 0) / panel.corners.length;
+    viewport.current!.scrollTo({ left: center * width / view.width - viewport.current!.clientWidth / 2,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
   const scale = width / view.width;
   return <section className="wall-view" data-world-side={view.side} aria-label={left ? "왼쪽 패널" : "오른쪽 패널"}>
     <div className="scene-view-heading">
       <h3>{left ? "왼쪽" : "오른쪽"}</h3>
       <div className="scene-navigation" aria-label={`${left ? "왼쪽" : "오른쪽"} 전경 이동`}>
+        <button type="button" className="show-panel-button" onClick={showPanel}>패널 보기</button>
         <button type="button" aria-label="왼쪽으로 이동" onClick={() => move(!left)}><ChevronLeft size={15} /></button>
         <button type="button" aria-label="오른쪽으로 이동" onClick={() => move(left)}><ChevronRight size={15} /></button>
       </div>

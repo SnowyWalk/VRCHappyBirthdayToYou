@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   Check,
   Copy,
   LoaderCircle,
@@ -26,8 +27,26 @@ import {
   withNickname,
 } from "@/lib/client";
 
+function validatedName(value: string) {
+  const name = value.trim().normalize("NFC");
+  if (new TextEncoder().encode(name).length > 128) {
+    throw new Error("이름은 UTF-8 128바이트 이하로 입력해 주세요. 한글은 보통 42자까지 사용할 수 있어요.");
+  }
+  if (/[\u0000-\u001f\u007f]/.test(value)) {
+    throw new Error("이름에 줄바꿈이나 제어 문자를 사용할 수 없어요.");
+  }
+  return name;
+}
+
+const STEPS = ["이름 입력", "사진 등록", "링크 복사"] as const;
+
 export function AlbumEditor({ id }: { id: string }) {
   const router = useRouter();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [nameComplete, setNameComplete] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const stageHeading = useRef<HTMLHeadingElement>(null);
+  const errorBanner = useRef<HTMLDivElement>(null);
   const [album, setAlbum] = useState<Album | null>(null);
   const [token, setToken] = useState("");
   const [nickname, setNickname] = useState("");
@@ -60,7 +79,7 @@ export function AlbumEditor({ id }: { id: string }) {
       router.replace("/");
     } catch (error) { setError((error as Error).message); setBusy(false); }
   }
-  const worldUrl = withNickname(dataUrl, nickname);
+  const worldUrl = withNickname(dataUrl, album?.nickname ?? "");
   const expiryText = album?.expiresAt
     ? new Intl.DateTimeFormat("ko-KR", {
         dateStyle: "short",
@@ -95,6 +114,8 @@ export function AlbumEditor({ id }: { id: string }) {
           setAlbum(loaded);
           setNickname(loaded.nickname);
           setDataUrl(publicUrl ?? "");
+          setNameComplete(loaded.revision > 0);
+          setStep(loaded.revision > 0 ? 2 : 1);
         }
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -107,6 +128,40 @@ export function AlbumEditor({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, retry]);
+  useEffect(() => {
+    if (loading || !album) return;
+    const target = step === 1 ? nameInput.current : stageHeading.current;
+    target?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
+    // Focus only when a new stage opens, never on save or typing within it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, loading]);
+  useEffect(() => {
+    if (error) errorBanner.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [error]);
+  function goToStep(next: 1 | 2 | 3) {
+    if (next === step) return;
+    if (busy || (next === 2 && !nameComplete) || (next === 3 && (!dataUrl || dirty))) return;
+    if (next === 2 && step === 1) {
+      try { validatedName(nickname); }
+      catch (error) { setError((error as Error).message); nameInput.current?.focus(); return; }
+    }
+    setError("");
+    setCopied("");
+    setStep(next);
+  }
+  function nextFromName(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      validatedName(nickname);
+      setError("");
+      setNameComplete(true);
+      setStep(2);
+    } catch (error) {
+      setError((error as Error).message);
+      nameInput.current?.focus();
+    }
+  }
   useEffect(
     () => () => {
       for (const url of objectUrls.current) URL.revokeObjectURL(url);
@@ -172,17 +227,12 @@ export function AlbumEditor({ id }: { id: string }) {
     setDirty(true);
   }
   async function save() {
-    if (!album) return;
+    if (!album || busy) return;
+    if (dataUrl && !dirty) { goToStep(3); return; }
     setBusy(true);
     setError("");
     try {
-      const name = nickname.trim().normalize("NFC");
-      if (new TextEncoder().encode(name).length > 128) {
-        throw new Error("이름은 UTF-8 128바이트 이하로 입력해 주세요. 한글은 보통 42자까지 사용할 수 있어요.");
-      }
-      if (/[\u0000-\u001f\u007f]/.test(nickname)) {
-        throw new Error("이름에 줄바꿈이나 제어 문자를 사용할 수 없어요.");
-      }
+      const name = validatedName(nickname);
       const body = new FormData();
       body.set("nickname", name);
       body.set("revision", String(album.revision));
@@ -209,6 +259,9 @@ export function AlbumEditor({ id }: { id: string }) {
       for (const url of objectUrls.current) URL.revokeObjectURL(url);
       objectUrls.current.clear();
       setDirty(false);
+      setConflict(false);
+      setCopied("");
+      setStep(3);
     } catch (e) {
       setConflict(e instanceof ResponseError && e.status === 409);
       setError((e as Error).message);
@@ -245,8 +298,9 @@ export function AlbumEditor({ id }: { id: string }) {
       await copyText(worldUrl);
       setError("");
       setCopied("data");
-      setTimeout(() => setCopied(""), 2000);
+
     } catch {
+      setCopied("");
       const field = document.getElementById("world-url") as HTMLInputElement | null;
       field?.focus();
       field?.select();
@@ -293,17 +347,22 @@ export function AlbumEditor({ id }: { id: string }) {
           </Button>
         </div>
       </header>
-      <main className="controller-main editor-main">
-        <div className="editor-heading">
-          <h1 className="sr-only">사진 설정</h1>
-          <div className="name-control">
-            <label htmlFor="nickname">생일자의 이름</label>
-            <Input id="nickname" placeholder="이름 입력" value={nickname} disabled={busy}
-              onChange={(e) => { setNickname(e.target.value); setDirty(true); }} />
-          </div>
-        </div>
+      <main className="controller-main editor-main" data-step={step}>
+        <nav className="editor-steps" aria-label="설정 순서">
+          <ol>{STEPS.map((label, index) => {
+            const number = (index + 1) as 1 | 2 | 3;
+            const unavailable = number === 2 ? !nameComplete : number === 3 ? !dataUrl || dirty : false;
+            return <li key={label}>
+              <button type="button" aria-label={`${number}. ${label}`} aria-current={step === number ? "step" : undefined}
+                disabled={busy || unavailable} onClick={() => goToStep(number)}>
+                <span className="step-number" aria-hidden="true">{number}</span>
+                <span>{label}</span>
+              </button>
+            </li>;
+          })}</ol>
+        </nav>
         {error && (
-          <div className="error-banner" role="alert">
+          <div ref={errorBanner} className="error-banner" role="alert">
             {error}
             {conflict && (
               <Button variant="outline" size="sm" onClick={reloadSaved}>
@@ -312,94 +371,81 @@ export function AlbumEditor({ id }: { id: string }) {
             )}
           </div>
         )}
-        <div className="controller-workspace">
-          <section className="scene-workspace" aria-label="사진 패널 선택">
-            <div className="scene-instruction">
-              <h2>패널을 누르거나 사진을 끌어 놓으세요.</h2>
+        {step === 1 && <section className="name-step" aria-labelledby="name-heading">
+          <h1 id="name-heading">생일자의 이름을 입력하세요.</h1>
+          <form onSubmit={nextFromName}>
+            <div className="name-control">
+              <label htmlFor="nickname">생일자의 이름 <span>선택 사항</span></label>
+              <Input ref={nameInput} id="nickname" placeholder="이름 입력" value={nickname} disabled={busy}
+                aria-describedby="name-help" aria-invalid={Boolean(error)}
+                onChange={(e) => { setNickname(e.target.value); setDirty(true); setCopied(""); setError(""); }} />
+              <p id="name-help">입력한 이름이 월드에 표시됩니다. 비워 두어도 계속할 수 있어요.</p>
             </div>
-            <WorldScene
-              orientations={{ ...album.panelOrientations, ...orientations }}
-              photos={photos}
-              onSelect={openPicker}
-              onRemove={remove}
-              onDropPhoto={(panel, dropped) => {
-                if (dropped.length !== 1) {
-                  setError("패널 하나에 사진 한 장씩 끌어 놓아 주세요.");
-                  return;
-                }
-                void choose(dropped[0], panel);
-              }}
-              disabled={busy}
-            />
-            <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 최대 4천만 픽셀 · 업로드 전 최대 2048px로 자동 축소 · 저장 후 24시간 보관</p>
-            <p className="gallery-empty-note">사진을 넣지 않은 패널은 월드에서 자동으로 제거됩니다.</p>
-          </section>
-          <div className="controller-inspector">
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              tabIndex={-1}
-              onChange={(e) => {
-                void choose(e.target.files?.[0], uploadPanel.current);
-                e.target.value = "";
-              }}
-            />
-            <div className="controller-save">
-              <div
-                className={`save-state ${dirty ? "unsaved" : ""}`}
-                role="status"
-              >
-                <span />
-                {busy
-                  ? checkingPhoto ? "사진 확인 중…" : "저장 중…"
-                  : dirty
-                    ? "저장하지 않은 변경 사항"
-                    : album.revision
-                      ? "모든 변경 사항 저장됨"
-                      : "이름과 사진을 입력하세요"}
+            <Button type="submit" size="lg" disabled={busy} className="next-step-button">
+              사진 등록하기 <ArrowRight size={18} />
+            </Button>
+          </form>
+        </section>}
+        {step === 2 && <>
+          <div className="photo-step-heading">
+            <div>
+              <h1 ref={stageHeading} tabIndex={-1}>사진을 등록하세요.</h1>
+              <p>사진을 넣을 패널을 누르거나, 사진을 끌어다 놓으세요.</p>
+              <p className="photo-ratio-help">가로 16:9 또는 세로 9:16 사진을 사용할 수 있어요.</p>
+              <p className="mobile-panel-help">전경을 옆으로 밀거나 ‘패널 보기’를 눌러 사진을 넣으세요.</p>
+            </div>
+            <button className="name-summary" type="button" onClick={() => goToStep(1)} disabled={busy}>
+              <span>생일자의 이름</span><strong>{nickname.trim() || "(이름 없음)"}</strong><span>수정</span>
+            </button>
+          </div>
+          <div className="controller-workspace">
+            <section className="scene-workspace" aria-label="사진 패널 선택">
+              <WorldScene
+                orientations={{ ...album.panelOrientations, ...orientations }}
+                photos={photos} onSelect={openPicker} onRemove={remove}
+                onDropPhoto={(panel, dropped) => {
+                  if (dropped.length !== 1) {
+                    setError("패널 하나에 사진 한 장씩 끌어 놓아 주세요.");
+                    return;
+                  }
+                  void choose(dropped[0], panel);
+                }} disabled={busy}
+              />
+              <p className="gallery-empty-note">모든 칸을 채울 필요는 없어요. 사진이 없는 패널은 월드에서 자동으로 제거됩니다.</p>
+              <details className="photo-requirements">
+                <summary>사진 형식과 보관 기간</summary>
+                <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 최대 4천만 픽셀 · 업로드 전 최대 2048px로 자동 축소 · 저장 후 24시간 보관</p>
+              </details>
+            </section>
+            <div className="controller-inspector">
+              <div className="controller-save">
+                <div className={`save-state ${dirty ? "unsaved" : ""}`} role="status">
+                  <span />{busy ? checkingPhoto ? "사진 확인 중…" : "저장 중…" : dirty ? "저장하지 않은 변경 사항" : album.revision ? "모든 변경 사항 저장됨" : "이름과 사진을 입력하세요"}
+                </div>
+                <Button size="lg" onClick={save} disabled={busy} className="save-button">
+                  {busy ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}
+                  <span>{album.atlasId && dirty ? "변경 사항 저장" : "저장하고 링크 만들기"}</span>
+                </Button>
               </div>
-              <Button
-                size="lg"
-                onClick={save}
-                disabled={busy || (!dirty && Boolean(album.atlasId))}
-                className="save-button"
-              >
-                {busy ? (
-                  <LoaderCircle className="spin" size={17} />
-                ) : (
-                  <Save size={17} />
-                )}
-                <span>{album.atlasId ? "변경 사항 저장" : "저장하고 링크 만들기"}</span>
-              </Button>
             </div>
           </div>
-        </div>
-        {dataUrl && <section className="world-link" aria-label="월드에 적용할 링크">
-          <label htmlFor="world-url">
-            월드에 붙여 넣을 링크{dataUrl && (Object.keys(files).length || removed.length) ? " · 새 사진은 저장 후 반영돼요" : ""}
-            {expiryText ? ` · ${expiryText} 만료` : " · 저장 후 24시간 보관"}
-          </label>
-          <div>
-            <Input
-              id="world-url"
-              aria-label="VRChat용 이미지 링크"
-              readOnly
-              value={worldUrl}
-              placeholder="저장하면 링크가 표시됩니다"
-              onFocus={(e) => e.target.select()}
-            />
-            <Button
-              aria-label="VRChat용 이미지 링크 복사"
-              onClick={copy}
-              disabled={!dataUrl || busy}
-              variant="outline"
-            >
-              {copied === "data" ? <Check size={16} /> : <Copy size={16} />}
+        </>}
+        <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1}
+          onChange={(e) => { void choose(e.target.files?.[0], uploadPanel.current); e.target.value = ""; }} />
+        {step === 3 && dataUrl && <section className="link-step" aria-labelledby="link-heading">
+          <h1 ref={stageHeading} tabIndex={-1} id="link-heading">링크를 복사하세요.</h1>
+          <p className="link-instruction">복사한 링크를 월드의 입력칸에 붙여넣으세요.</p>
+          <div className="save-state" role="status"><span />모든 변경 사항 저장됨</div>
+          <div className="world-link" aria-label="월드에 적용할 링크">
+            <label htmlFor="world-url">월드에 붙여 넣을 링크</label>
+            <Input id="world-url" aria-label="VRChat용 이미지 링크" readOnly value={worldUrl} onFocus={(e) => e.target.select()} />
+            <Button size="lg" aria-label="VRChat용 이미지 링크 복사" onClick={copy} disabled={busy || dirty} className="copy-link-button">
+              {copied === "data" ? <Check size={20} /> : <Copy size={20} />}
               {copied === "data" ? "복사했어요" : "링크 복사"}
             </Button>
+            <p className="link-expiry">{expiryText ? `${expiryText}까지 사용 가능 · 이후 사진과 링크가 자동 삭제됩니다.` : "사진과 링크는 저장 후 24시간 뒤 자동 삭제됩니다."}</p>
           </div>
+          <Button variant="outline" className="edit-photos-button" onClick={() => goToStep(2)} disabled={busy}><ArrowLeft size={16} />사진 수정하기</Button>
         </section>}
         <div className="editor-delete"><Button variant="ghost" className="delete-album-button" onClick={deleteCurrentAlbum} disabled={busy}>앨범 삭제</Button></div>
       </main>
