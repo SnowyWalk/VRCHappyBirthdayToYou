@@ -5,8 +5,30 @@ import {
 } from "./upload-limits";
 import { readPhotoSize } from "./photo-size";
 
+export type PhotoOrientation = "landscape" | "portrait";
+export type PhotoFramingMode = "crop" | "contain";
+
+export type PhotoFramingOptions = {
+  orientation: PhotoOrientation;
+  mode: PhotoFramingMode;
+  /** Crop offset from the start edge to the end edge. Defaults to center. */
+  position?: number;
+};
+
+export class PhotoRatioError extends Error {
+  readonly width: number;
+  readonly height: number;
+
+  constructor(width: number, height: number) {
+    super(`가로 16:9 또는 세로 9:16 사진만 사용할 수 있어요. 선택한 사진은 ${width}×${height}px입니다. 사진을 자르거나 여백을 넣어 비율을 맞춰 주세요.`);
+    this.name = "PhotoRatioError";
+    this.width = width;
+    this.height = height;
+  }
+}
+
 /** Decode, orient and resize locally. The original file never leaves the device. */
-export async function preparePhoto(file: File) {
+export async function preparePhoto(file: File, framing?: PhotoFramingOptions) {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
     throw new Error("JPG, PNG, WebP 사진만 선택할 수 있어요.");
   }
@@ -23,10 +45,13 @@ export async function preparePhoto(file: File) {
     const height = image.naturalHeight;
     assertPixelLimit(width, height);
     if (width * 9 !== height * 16 && width * 16 !== height * 9) {
-      throw new Error(`가로 16:9 또는 세로 9:16 사진만 사용할 수 있어요. 선택한 사진은 ${width}×${height}px입니다. 사진을 자르거나 여백을 넣어 비율을 맞춰 주세요.`);
+      if (!framing) {
+        throw new PhotoRatioError(width, height);
+      }
     }
 
-    const landscape = width > height;
+    const orientation = framing?.orientation ?? (width > height ? "landscape" : "portrait");
+    const landscape = orientation === "landscape";
     // Keep the resized image on exact 16:9 / 9:16 integer dimensions so the
     // server-side atlas validator receives the same shape the user approved.
     const unit = Math.max(
@@ -39,7 +64,7 @@ export async function preparePhoto(file: File) {
     const context = canvas.getContext("2d");
     if (!context) throw new Error("사진을 줄일 수 없어요. 다른 브라우저에서 다시 시도해 주세요.");
     context.imageSmoothingQuality = "high";
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    drawFramedImage(context, image, width, height, canvas.width, canvas.height, framing);
     const blob = await encodeBoundedPhoto(canvas);
     if (blob.size > MAX_IMAGE_BYTES) {
       throw new Error("사진을 줄인 후에도 용량이 너무 커요. 다른 사진을 선택해 주세요.");
@@ -47,7 +72,7 @@ export async function preparePhoto(file: File) {
     const ext = blob.type === "image/webp" ? "webp" : "png";
     return {
       file: new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.${ext}`, { type: blob.type }),
-      orientation: landscape ? "landscape" as const : "portrait" as const,
+      orientation,
     };
   } finally {
     URL.revokeObjectURL(sourceUrl);
@@ -57,6 +82,55 @@ export async function preparePhoto(file: File) {
       canvas.height = 0;
     }
   }
+}
+
+function drawFramedImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number,
+  framing: PhotoFramingOptions | undefined,
+) {
+  if (framing?.mode !== "contain") {
+    const targetRatio = targetWidth / targetHeight;
+    const sourceRatio = sourceWidth / sourceHeight;
+    const position = clamp01(framing?.position ?? 0.5);
+    let sx = 0;
+    let sy = 0;
+    let sw = sourceWidth;
+    let sh = sourceHeight;
+
+    if (sourceRatio > targetRatio) {
+      sw = sourceHeight * targetRatio;
+      sx = (sourceWidth - sw) * position;
+    } else if (sourceRatio < targetRatio) {
+      sh = sourceWidth / targetRatio;
+      sy = (sourceHeight - sh) * position;
+    }
+
+    context.drawImage(image, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+    return;
+  }
+
+  context.fillStyle = "#000";
+  context.fillRect(0, 0, targetWidth, targetHeight);
+  const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const drawnWidth = sourceWidth * scale;
+  const drawnHeight = sourceHeight * scale;
+  context.drawImage(
+    image,
+    (targetWidth - drawnWidth) / 2,
+    (targetHeight - drawnHeight) / 2,
+    drawnWidth,
+    drawnHeight,
+  );
+}
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0.5;
+  return Math.min(1, Math.max(0, value));
 }
 
 function assertPixelLimit(width: number, height: number) {

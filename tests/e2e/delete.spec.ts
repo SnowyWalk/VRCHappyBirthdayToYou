@@ -22,7 +22,7 @@ test("recent and editor deletion require confirmation and invalidate server link
   }
   const first = await createSaved("목록에서 삭제");
   await page.goto("/");
-  const recentDelete = page.getByRole("button", { name: "목록에서 삭제 사진과 링크 삭제", exact: true });
+  const recentDelete = page.getByRole("button", { name: "목록에서 삭제 삭제", exact: true });
   await expect(recentDelete).toBeVisible();
   page.once("dialog", dialog => dialog.dismiss());
   await recentDelete.click();
@@ -36,7 +36,7 @@ test("recent and editor deletion require confirmation and invalidate server link
   await page.setViewportSize({ width: 360, height: 780 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
   page.once("dialog", dialog => dialog.accept());
-  await page.getByRole("button", { name: "사진과 링크 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "삭제", exact: true }).click();
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("region", { name: "최근 편집 링크", exact: true })).toHaveCount(0);
   expect((await request.get(`/data/${second.id}`)).status()).toBe(404);

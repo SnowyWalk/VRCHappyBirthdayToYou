@@ -32,8 +32,10 @@ test("recent links restore legacy tokens, retain the latest five issuances and r
   const last = records[5];
   await page.evaluate(id => localStorage.removeItem(`birthday-world:edit:${id}`), last.album.id);
   await recent.getByRole("link").first().click();
-  await expect(page.getByLabel("생일자의 이름")).toHaveValue(last.album.nickname);
-  await page.getByLabel("생일자의 이름").fill("수정 완료");
+  await page.getByRole("button", { name: "1. 이름 입력", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: /생일자의 이름/ })).toHaveValue(last.album.nickname);
+  await page.getByRole("textbox", { name: /생일자의 이름/ }).fill("수정 완료");
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: "변경 사항 저장", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const url = await page.getByLabel("VRChat용 이미지 링크", { exact: true }).inputValue();
@@ -41,9 +43,11 @@ test("recent links restore legacy tokens, retain the latest five issuances and r
   await expect(recent.getByRole("link").first()).toContainText("수정 완료");
   await page.evaluate(id => localStorage.removeItem(`birthday-world:edit:${id}`), last.album.id);
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
-  await page.getByLabel("앨범 링크 또는 UUID").fill(url);
+  await page.getByLabel("월드에 사용한 링크").fill(url);
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
-  await expect(page.getByLabel("생일자의 이름")).toHaveValue("수정 완료");
+  await page.getByRole("button", { name: "1. 이름 입력", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: /생일자의 이름/ })).toHaveValue("수정 완료");
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: "L1 사진 제거", exact: true }).click();
   await page.getByRole("button", { name: "변경 사항 저장", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
@@ -54,7 +58,7 @@ test("recent links restore legacy tokens, retain the latest five issuances and r
 test("new draft appears as an editable recent issuance without pretending it was saved", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "새로 만들기", exact: true }).click();
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /생일자의 이름/ })).toBeVisible();
   const edit = page.url();
   await page.goto("/");
   const recent = page.getByRole("region", { name: "최근 편집 링크", exact: true });
@@ -67,5 +71,5 @@ test("new draft appears as an editable recent issuance without pretending it was
   await expect(recent).toContainText("아직 저장하지 않음");
   await recent.getByRole("link").click();
   await expect(page).toHaveURL(edit);
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /생일자의 이름/ })).toBeVisible();
 });

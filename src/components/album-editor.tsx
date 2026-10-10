@@ -17,7 +17,8 @@ import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WorldScene } from "@/components/world-scene";
 import { PANELS, type Album, type PanelId } from "@/lib/panels";
-import { preparePhoto } from "@/lib/prepare-photo";
+import { preparePhoto, PhotoRatioError, type PhotoFramingOptions } from "@/lib/prepare-photo";
+import { PhotoFramingDialog } from "@/components/photo-framing-dialog";
 import {
   copyText,
   readResponse,
@@ -61,6 +62,8 @@ export function AlbumEditor({ id }: { id: string }) {
   const [checkingPhoto, setCheckingPhoto] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [photoError, setPhotoError] = useState<{ panel: PanelId; message: string } | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; panel: PanelId } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [copied, setCopied] = useState("");
   const [dataUrl, setDataUrl] = useState("");
@@ -179,19 +182,25 @@ export function AlbumEditor({ id }: { id: string }) {
           (album?.panels[p.id] ? `/media/${id}/${album.panels[p.id]}` : null),
     ]),
   );
-  async function choose(file: File | undefined, panel: PanelId) {
+  async function choose(file: File | undefined, panel: PanelId, framing?: PhotoFramingOptions) {
     if (!file || busy || choosingPhoto.current) return;
     choosingPhoto.current = true;
     setBusy(true);
     setCheckingPhoto(true);
     let url: string;
     try {
-      const prepared = await preparePhoto(file);
+      const prepared = await preparePhoto(file, framing);
       file = prepared.file;
       url = URL.createObjectURL(file);
       setOrientations(prev => ({ ...prev, [panel]: prepared.orientation }));
     } catch (e) {
-      setError(e instanceof Error && e.name !== "EncodingError" ? e.message : "사진을 읽지 못했어요. 올바른 JPG, PNG, WebP 파일을 선택해 주세요.");
+      if (e instanceof PhotoRatioError) {
+        setPendingPhoto({ file, panel });
+        setPhotoError(null);
+      } else {
+        setPendingPhoto(null);
+        setPhotoError({ panel, message: e instanceof Error && e.name !== "EncodingError" ? e.message : "사진을 읽지 못했어요. 다른 사진을 선택해 주세요." });
+      }
       setBusy(false);
       setCheckingPhoto(false);
       choosingPhoto.current = false;
@@ -207,6 +216,8 @@ export function AlbumEditor({ id }: { id: string }) {
     setRemoved((prev) => prev.filter((id) => id !== panel));
     setDirty(true);
     setError("");
+    setPhotoError(null);
+    setPendingPhoto(null);
     setBusy(false);
     setCheckingPhoto(false);
     choosingPhoto.current = false;
@@ -300,7 +311,7 @@ export function AlbumEditor({ id }: { id: string }) {
       field?.focus();
       field?.select();
       setError(
-        "브라우저가 자동 복사를 차단했어요. 선택된 링크를 길게 눌러 복사해 주세요.",
+        "브라우저가 자동 복사를 차단했어요. 선택된 링크를 Ctrl+C 또는 ⌘C로 복사해 주세요.",
       );
     }
   }
@@ -397,9 +408,10 @@ export function AlbumEditor({ id }: { id: string }) {
               <WorldScene
                 orientations={{ ...album.panelOrientations, ...orientations }}
                 photos={photos} onSelect={openPicker} onRemove={remove}
+                photoError={photoError}
                 onDropPhoto={(panel, dropped) => {
                   if (dropped.length !== 1) {
-                    setError("패널 하나에 사진 한 장씩 끌어 놓아 주세요.");
+                    setPhotoError({ panel, message: "패널 하나에 사진 한 장씩 끌어 놓아 주세요." });
                     return;
                   }
                   void choose(dropped[0], panel);
@@ -425,9 +437,12 @@ export function AlbumEditor({ id }: { id: string }) {
         </>}
         <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1}
           onChange={(e) => { void choose(e.target.files?.[0], uploadPanel.current); e.target.value = ""; }} />
+        {pendingPhoto && <PhotoFramingDialog file={pendingPhoto.file} busy={busy}
+          onCancel={() => setPendingPhoto(null)}
+          onConfirm={(options) => void choose(pendingPhoto.file, pendingPhoto.panel, options)} />}
         {step === 3 && dataUrl && <section className="link-step" aria-labelledby="link-heading">
           <h1 ref={stageHeading} tabIndex={-1} id="link-heading">링크를 복사하세요.</h1>
-          <p className="link-instruction">월드의 ‘생일 사진 설정’ 패널에 붙여넣고 ‘적용’을 누르세요.</p>
+          <p className="link-instruction">월드의 ‘생일 사진 설정’ 패널에서 URL 입력칸에 붙여넣고, 입력 창의 ‘OK’를 누르세요.</p>
           <div className="save-state" role="status"><span />모든 변경 사항 저장됨</div>
           <div className="link-result-layout">
           <div className="world-link" aria-label="월드에 적용할 링크">
@@ -450,12 +465,12 @@ export function AlbumEditor({ id }: { id: string }) {
                 <path d="M50 4V90M20 65L50 94L80 65" />
               </svg>
             </div>
-            <figcaption>아틀라스 이미지 URL 입력칸에 붙여넣고 <strong>적용</strong>을 누르세요.</figcaption>
+            <figcaption>URL 입력칸에 붙여넣고 입력 창의 <strong>OK</strong>를 누르면 자동으로 반영됩니다.</figcaption>
           </figure>
           </div>
           <Button variant="outline" className="edit-photos-button" onClick={() => goToStep(2)} disabled={busy}><ArrowLeft size={16} />사진 수정하기</Button>
         </section>}
-        <div className="editor-delete"><Button variant="ghost" className="delete-album-button" onClick={deleteCurrentAlbum} disabled={busy}>사진과 링크 삭제</Button></div>
+        <div className="editor-delete"><Button variant="ghost" className="delete-album-button" onClick={deleteCurrentAlbum} disabled={busy}>삭제</Button></div>
       </main>
     </div>
   );

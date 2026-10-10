@@ -11,14 +11,14 @@
 - Success: saved content survives server restart; unchanged photos are not uploaded again.
 - Non-goals: modifying Unity project, authentication, production hosting.
 ## Personas and jobs
-- Visitors arrive from the world's instructions; they need to set panel photos, enter a name and copy a link, on desktop or mobile.
+- Visitors arrive from the world's instructions; they need to set panel photos, enter a name and copy a link, primarily on desktop.
 ## Information architecture
 - `/`: actual world preview, dominant 새로 만들기, secondary 불러오기. `/edit/{uuid}`: ordered steps 이름 입력 → 사진 등록 → 링크 복사; show only the current task. Keep the interactive world capture full width in the photo step.
 - `/party/{hash}/atlas.png`: immutable BWAT image; `/data/{uuid}` remains debugging JSON; `/media/{uuid}/{hash}`: originals.
 ## Design principles
 - Preserve world positions: eight photo targets overlay their measured texture corners in the world render. Selecting a target immediately opens its file picker. Never rearrange the panels into cards, columns or an arbitrary grid.
 - Clearly distinguish unsaved preview from saved world data.
-- Home uses one fresh overview of the circular terrace. Editor uses two real captures of four panels each, with the guestbook and complete HAPPY BIRTHDAY heading visible in both. These are essential spatial landmarks; never hide them or crop away the heading. Keep panel positions, sizes and rotations unchanged; hide only the obstructing Photo booth, restore in finally, and never save the scene. Measured texture corners connect click targets to Unity objects and existing atlas IDs. Do not rearrange panels into a grid.
+- Home uses one fresh overview of the circular terrace. Editor uses two real captures of four panels each, with the guestbook and complete HAPPY BIRTHDAY heading visible in both. These are essential spatial landmarks; never hide them or crop away the heading. Keep panel positions, sizes and rotations unchanged; exclude the world UI layer from the temporary capture camera and hide the obstructing Photo booth, restore in finally, and never save the scene. Measured texture corners connect click targets to Unity objects and existing atlas IDs. Do not rearrange panels into a grid.
 ## Visual language
 - Neutral light and dark surfaces; high-contrast blue action buttons. The world image conveys the world atmosphere; interface copy stays functional.
 - Home shows the world image, dominant 새로 만들기 and secondary 불러오기. No visible heading, emotional copy, tagline or marketing text. Primary CTA >=64px high and >=260px wide. Editor shows a name field and the full-width world image; photos overlay the exact projected texture corners instead of separate cards.
@@ -73,3 +73,10 @@ Keep the editable album UUID; changed photo content produces an immutable 2048×
 - Render the same camera framing at 4800×2700; publish lossless WebP crops (walls 4800×1200, overview 3480×1920). Keep logical coordinates unchanged; serve these static assets without Next image recompression.
 - Deletion action is 사진과 링크 삭제 in both the editor and recent links.
 - Remove the repeated ratio sentence above the scene and the help heading, file extensions, pixel limit and resizing explanation. Preserve concise ratio/24-hour guidance below the scene and actionable validation errors.
+
+## Desktop UX revision (2026-10-10)
+- PC use takes priority. Put Create/Load above the main preview. Keep recent names/count/time and a trash control; omit visible UUIDs. Deletion action is 삭제; confirmation explains permanent removal. Load label is 월드에 사용한 링크.
+- Wall headers show a small overview highlighting the relevant half and specify 무대를 바라본 왼쪽/오른쪽. Preserve actual panel geometry. Exclude UI layer22 from wall captures so world UI text does not float over the scene.
+- Nonmatching photos open 사진 맞추기 with crop/contain, landscape/portrait and crop positioning. Preview and encoding use the same framing; originals stay local. Cancellation preserves earlier photo. Existing file/pixel safety and bounded2048 output remain.
+- Photo errors appear with the corresponding wall and a 다시 선택 action without jumping to page top.
+- Final instruction: paste into the URL input and confirm the VRChat text entry dialog; automatic application does not require the kiosk 적용 button.

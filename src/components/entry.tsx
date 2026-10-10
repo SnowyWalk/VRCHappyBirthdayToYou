@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowRight, FolderOpen, LoaderCircle, X } from "lucide-react";
+import { ArrowRight, FolderOpen, LoaderCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -102,7 +102,8 @@ export function Entry() {
           <Image
             src={WORLD_OVERVIEW.image}
             alt="Birthday World의 생일 홀과 사진 갤러리"
-            fill
+            width={WORLD_OVERVIEW.width}
+            height={WORLD_OVERVIEW.height}
             priority
             unoptimized
             sizes="100vw"
@@ -144,13 +145,12 @@ export function Entry() {
                 <span className="recent-name">{album.nickname.trim() || "(이름 없음)"}</span>
                 {typeof album.photoCount === "number" && <span className="recent-photo-count" title={`사진 ${album.photoCount}장 등록됨`}>{album.photoCount}/8</span>}
               </div>
-              <small>{album.id}</small>
             </Link>
             {album.revision > 0 ? <time dateTime={album.updatedAt} title={new Intl.DateTimeFormat("ko-KR", { dateStyle: "full", timeStyle: "long" }).format(new Date(album.updatedAt))}>
               {formatRelativeTime(album.updatedAt, now)}
             </time> : <span className="recent-unsaved">아직 저장하지 않음</span>}
             <button type="button" className="recent-delete" disabled={busy}
-              aria-label={`${album.nickname || album.id} 사진과 링크 삭제`} title="사진과 링크 삭제" onClick={() => void removeAlbum(album)}><X size={16} /></button>
+              aria-label={`${album.nickname || "(이름 없음)"} 삭제`} title="삭제" onClick={() => void removeAlbum(album)}><Trash2 size={16} /></button>
           </li>)}</ul>
         </section>}
         {error && !open && (
@@ -168,7 +168,7 @@ export function Entry() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={load} className="load-form">
-            <label htmlFor="album-link">앨범 링크 또는 UUID</label>
+            <label htmlFor="album-link">월드에 사용한 링크</label>
             <Input
               id="album-link"
               value={input}

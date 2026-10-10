@@ -2,7 +2,7 @@
   "views": [
     {
       "side": "left",
-      "image": "/world-left-ca5d6f5217c2.webp",
+      "image": "/world-left-b98c398d3e82.webp",
       "width": 1600,
       "height": 400,
       "crop": {
@@ -111,7 +111,7 @@
     },
     {
       "side": "right",
-      "image": "/world-right-e6a3a6ad864a.webp",
+      "image": "/world-right-20614f30b5c3.webp",
       "width": 1600,
       "height": 400,
       "crop": {

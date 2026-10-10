@@ -71,9 +71,9 @@ button:disabled { cursor: default; }
 .dark .theme-toggle .theme-sun { display: block; }
 .controller-main { max-width: 1400px; margin: 0 auto; padding: 12px 32px 36px; }
 .entry-controller { padding-top: 0; }
-.entry-world { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.entry-world > img { position: static !important; width: 100% !important; height: auto !important; aspect-ratio: 1160/640; object-fit: contain; }
-.entry-content { padding: 22px; display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; }
+.entry-world { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.entry-world > img { width: 100%; height: auto; aspect-ratio: 1160/640; object-fit: contain; pointer-events: none; }
+.entry-content { order: -1; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; }
 .entry-expiry-note { flex-basis: 100%; margin: 0; color: var(--subtle); font-size: 12px; text-align: center; }
 .entry-content .create-button { width: 320px; height: 68px; border-radius: 8px; background: #315ddd; color: #fff; font-size: 18px; font-weight: 600; gap: 24px; }
 .entry-content .create-button:hover { background: #244bbb; }
@@ -125,6 +125,13 @@ button:disabled { cursor: default; }
 .world-render { position: relative; overflow: hidden; }
 .world-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 .world-canvas > img { pointer-events: none; user-select: none; }
+.wall-location { display: flex; align-items: center; gap: 12px; }
+.wall-map { width: 96px; height: 53px; position: relative; overflow: hidden; border-radius: 5px; }
+.wall-map img { width: 100%; height: 100%; object-fit: cover; }
+.wall-map span { position: absolute; inset: 0 50% 0 0; border: 2px solid #8ae1ff; background: #8ae1ff30; }
+.wall-map.right span { inset: 0 0 0 50%; }
+.panel-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; background: #51242f; color: #fff; font-size: 13px; line-height: 1.6; }
+.panel-error button { flex-shrink: 0; padding: 8px 12px; border: 1px solid #ffffff80; border-radius: 6px; font-weight: 600; }
 .scene-panel { position: absolute; top: 0; left: 0; width: 200px; height: 112.5px; transform-origin: 0 0; padding: 0; border: 3px solid #e8ecff; border-radius: 0; background: #101828dc; color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .scene-panel:hover { background: #234ca9d9; border-color: #fff; }
 .scene-panel.drop-target { background: #234ca9e6; border-color: #91d9ff; box-shadow: inset 0 0 0 5px #91d9ff, 0 0 20px #91d9ff; }
@@ -163,6 +170,8 @@ button:disabled { cursor: default; }
   .controller-save { justify-content: space-between; }
 }
 @media(max-width: 768px) {
+  .wall-map { display: none; }
+  .wall-location h3 { font-size: 12px; }
   .scene-view-heading { padding: 8px 14px; }
   .scene-navigation { display: flex; gap: 8px; }
   .scene-navigation button { display: flex; align-items: center; justify-content: center; gap: 4px; width: 44px; height: 44px; padding: 0 10px; border: 1px solid #6c7190; border-radius: 6px; background: transparent; color: #d6daf0; font-size: 12px; }

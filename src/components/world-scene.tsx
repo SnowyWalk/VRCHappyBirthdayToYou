@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Plus, Check, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { PANELS, type PanelId } from "@/lib/panels";
-import { WORLD_VIEWS, panelLocation, panelTransform } from "@/lib/world-view";
+import { WORLD_VIEWS, WORLD_OVERVIEW, panelLocation, panelTransform } from "@/lib/world-view";
 
 type SceneProps = {
   photos?: Partial<Record<PanelId, string | null>>;
@@ -12,9 +12,10 @@ type SceneProps = {
   onRemove?: (id: PanelId) => void;
   onDropPhoto?: (id: PanelId, files: File[]) => void;
   disabled?: boolean;
+  photoError?: { panel: PanelId; message: string } | null;
 };
 
-function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled }: SceneProps & { view: typeof WORLD_VIEWS[number] }) {
+function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled, photoError }: SceneProps & { view: typeof WORLD_VIEWS[number] }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(view.width);
   const [dropTarget, setDropTarget] = useState<PanelId | null>(null);
@@ -46,13 +47,23 @@ function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled
   const scale = width / view.width;
   return <section className="wall-view" data-world-side={view.side} aria-label={left ? "왼쪽 패널" : "오른쪽 패널"}>
     <div className="scene-view-heading">
-      <h3>{left ? "왼쪽" : "오른쪽"}</h3>
+      <div className="wall-location">
+        <div className={`wall-map ${view.side}`} aria-hidden="true">
+          <Image src={WORLD_OVERVIEW.image} width={1160} height={640} alt="" unoptimized />
+          <span />
+        </div>
+        <h3>무대를 바라본 {left ? "왼쪽" : "오른쪽"}</h3>
+      </div>
       <div className="scene-navigation" aria-label={`${left ? "왼쪽" : "오른쪽"} 전경 이동`}>
         <button type="button" className="show-panel-button" onClick={showPanel}>패널 보기</button>
         <button type="button" aria-label="왼쪽으로 이동" onClick={() => move(!left)}><ChevronLeft size={15} /></button>
         <button type="button" aria-label="오른쪽으로 이동" onClick={() => move(left)}><ChevronRight size={15} /></button>
       </div>
     </div>
+    {photoError?.panel.includes(view.side) && <div className="panel-error" role="alert">
+      <span>{panelLocation(photoError.panel)} · {photoError.message}</span>
+      <button type="button" disabled={disabled} onClick={() => onSelect?.(photoError.panel)}>다시 선택</button>
+    </div>}
     <div className="scene-viewport" ref={viewport}>
       <div className="world-render" style={{ width, height: view.height * scale }}>
         <div className="world-canvas" style={{ width: view.width, height: view.height, transform: `scale(${scale})` }}>

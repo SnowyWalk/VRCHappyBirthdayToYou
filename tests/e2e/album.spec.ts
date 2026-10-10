@@ -129,6 +129,7 @@ async function continueToPhotos(page: Page, name?: string) {
   await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.getByRole("button", { name: "2. 사진 등록", exact: true })).toBeEnabled();
   await expect(page.locator(".scene-panel").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "사진을 등록하세요.", exact: true })).toBeFocused();
 }
 
 function nameField(page: Page) {
@@ -351,7 +352,7 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
   });
   await page.getByRole("link", { name: "처음으로", exact: true }).click();
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
-  await page.getByLabel("앨범 링크 또는 UUID").fill(editLink);
+  await page.getByLabel("월드에 사용한 링크").fill(editLink);
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
   await expect(page.locator(".scene-panel").first()).toBeVisible();
   await expect(nameField(page)).not.toBeVisible();
@@ -457,7 +458,7 @@ test("invalid load, missing token and malformed uploads are handled", async ({
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
-  await page.getByLabel("앨범 링크 또는 UUID").fill("bad-input");
+  await page.getByLabel("월드에 사용한 링크").fill("bad-input");
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("올바른 UUID");
   const created = await (await request.post("/api/albums")).json();
@@ -478,7 +479,7 @@ test("invalid load, missing token and malformed uploads are handled", async ({
   ).toBeVisible();
 });
 
-test("rejects photos that are not exact 16:9 or 9:16 before save", async ({
+test("fits other photo ratios locally and preserves the previous photo on cancel", async ({
   page,
   request,
 }) => {
@@ -493,14 +494,42 @@ test("rejects photos that are not exact 16:9 or 9:16 before save", async ({
   const chooser = await chooserPromise;
   await chooser.setFiles(invalidRatioImage);
 
-  await expect(
-    page.getByRole("alert").filter({ hasText: "가로 16:9 또는 세로 9:16" }),
-  ).toBeVisible();
-  await expect(page.getByRole("status")).toHaveText("이름과 사진을 입력하세요");
+  const dialog = page.getByRole("dialog", { name: "사진 맞추기" });
+  async function chooseForFraming(target: Locator) {
+    const chooser = page.waitForEvent("filechooser");
+    await target.click();
+    await (await chooser).setFiles(invalidRatioImage);
+    await expect(dialog).toBeVisible();
+  }
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "이 사진 사용", exact: true }).click();
+  const panel = page.locator('[data-panel-id="hero-left"]');
+  await expect(panel).toHaveClass(/populated/);
+  const prior = await panel.locator("img").getAttribute("src");
+  await chooseForFraming(panel);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "취소", exact: true }).click();
+  await expect(panel.locator("img")).toHaveAttribute("src", prior!);
+
+  await chooseForFraming(page.locator('[data-panel-id="hero-right"]'));
+  await dialog.getByRole("button", { name: "세로", exact: true }).click();
+  await dialog.getByRole("button", { name: "여백 넣기", exact: true }).click();
+  await page.screenshot({ path: "artifacts/screenshots/photo-framing-desktop.png", fullPage: true });
+  await dialog.getByRole("button", { name: "이 사진 사용", exact: true }).click();
+  await expect(page.locator('[data-panel-id="hero-right"]')).toHaveClass(/populated/);
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const manifest = await (await request.get(`/data/${album.id}`)).json();
-  expect(manifest.panels).toHaveLength(0);
+  expect(manifest.panels).toHaveLength(2);
+  const { album: saved } = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
+  const cropped = await (await request.get(`/media/${album.id}/${saved.panels["hero-left"]}`)).body();
+  const padded = await (await request.get(`/media/${album.id}/${saved.panels["hero-right"]}`)).body();
+  expect(await sharp(cropped).metadata()).toMatchObject({ width: 112, height: 63 });
+  expect(await sharp(padded).metadata()).toMatchObject({ width: 63, height: 112 });
+  const {data, info} = await sharp(padded).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  expect(Array.from(data.subarray(0, 4))).toEqual([0, 0, 0, 255]);
+  expect(data[(56 * info.width + 31) * 4 + 3]).toBe(255);
+  await request.delete(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } });
 });
 
 test("nickname changes hide stale links until save and reuse the existing PNG", async ({ page, context, request }) => {
@@ -563,7 +592,7 @@ test("copies without Clipboard API and selects the link when copying is blocked"
   expect(await page.evaluate(() => document.documentElement.dataset.copiedText)).toBe(link);
   await page.evaluate(() => { document.execCommand = () => false; });
   await page.getByRole("button", { name: "VRChat용 이미지 링크 복사", exact: true }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "선택된 링크를 길게 눌러" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Ctrl+C" })).toBeVisible();
   await expect(field).toBeFocused();
   expect(await field.evaluate((input: HTMLInputElement) => input.value.slice(input.selectionStart!, input.selectionEnd!))).toBe(link);
   expect(await page.locator("textarea").count()).toBe(0);
@@ -581,7 +610,7 @@ test("Load accepts a world PNG URL with encoded nickname and preserves edit auth
   expect(new URL(worldLink).searchParams.get("name")).toBe("설보&pea");
   await page.goto("/");
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
-  await page.getByLabel("앨범 링크 또는 UUID").fill(worldLink);
+  await page.getByLabel("월드에 사용한 링크").fill(worldLink);
   await page.getByRole("button", { name: "불러오기", exact: true }).click();
   await expect(page).toHaveURL(originalEdit);
   await expect(page.locator(".scene-panel").first()).toBeVisible();
@@ -595,9 +624,9 @@ test("Load accepts a world PNG URL with encoded nickname and preserves edit auth
   const other = await context.browser()!.newContext();
   try {
     const otherPage = await other.newPage();
-    await otherPage.goto("http://localhost:3000/");
+    await otherPage.goto(new URL("/", page.url()).href);
     await otherPage.getByRole("button", { name: "불러오기", exact: true }).click();
-    await otherPage.getByLabel("앨범 링크 또는 UUID").fill(worldLink);
+    await otherPage.getByLabel("월드에 사용한 링크").fill(worldLink);
     await otherPage.getByRole("button", { name: "불러오기", exact: true }).click();
     await expect(otherPage.getByRole("alert").filter({ hasText: "편집 권한이 없어요" })).toBeVisible();
     expect(new URL(otherPage.url()).pathname).toBe("/");
@@ -666,7 +695,8 @@ test("drop assigns only the targeted panel and reveals the link after saving", a
   await expect(page.locator(".world-link")).toHaveCount(0);
   const firstPreview = await panel.locator("img").getAttribute("src");
   await drop([invalidRatioImage]);
-  await expect(page.getByRole("alert").filter({ hasText: "16:9" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "사진 맞추기" })).toBeVisible();
+  await page.getByRole("button", { name: "취소", exact: true }).click();
   await expect(panel.locator("img")).toHaveAttribute("src", firstPreview!);
   await drop([landscapeImage, portraitImage]);
   await expect(page.getByRole("alert").filter({ hasText: "한 장씩" })).toBeVisible();
