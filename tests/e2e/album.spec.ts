@@ -126,7 +126,7 @@ async function continueToPhotos(page: Page, name?: string) {
   await expect(page.getByRole("button", { name: "1. 이름 입력", exact: true })).toBeVisible();
   await expect(nameField(page)).toBeVisible();
   if (name !== undefined) await nameField(page).fill(name);
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.getByRole("button", { name: "2. 사진 등록", exact: true })).toBeEnabled();
   await expect(page.locator(".scene-panel").first()).toBeVisible();
 }
@@ -158,7 +158,7 @@ test("concurrent edits preserve the first save and allow explicit reload", async
   await page.goto(`/edit/${album.id}#key=${editToken}`);
   await expect(nameField(page)).toBeVisible();
   await nameField(page).fill("이 브라우저의 수정");
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   const otherSave = await request.put(`/api/albums/${album.id}`, {
     headers: { Authorization: `Bearer ${editToken}` },
     multipart: { nickname: "먼저 저장한 이름", revision: "0", remove: "[]" },
@@ -186,26 +186,33 @@ test("step flow focuses each task, preserves edits and hides stale links", async
   await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
   await page.screenshot({ path: "artifacts/screenshots/step-name-desktop.png", fullPage: true });
 
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.getByRole("heading", { name: "사진을 등록하세요.", exact: true })).toBeFocused();
+  await expect(page.getByText("사진 형식과 보관 기간", { exact: true })).toBeVisible();
+  await expect(page.locator(".gallery-footnote")).toBeVisible();
+  await expect(page.locator(".gallery-footnote")).toContainText("저장 후 24시간 보관");
   await expect(nameField(page)).not.toBeVisible();
   await chooseFileFrom(page, page.locator('[data-panel-id="hero-left"]'), landscapeImage);
   await expect(page.locator('[data-panel-id="hero-left"]')).toHaveClass(/populated/);
+  await expect.poll(() => page.locator(".world-canvas > img").evaluateAll((images: HTMLImageElement[]) => images.every(img => img.complete && img.naturalWidth > 0))).toBe(true);
   await page.screenshot({ path: "artifacts/screenshots/step-photos-desktop.png", fullPage: true });
 
   await openNameStep(page);
   await expect(nameField(page)).toBeFocused();
   await nameField(page).fill("나쁜\u0001이름");
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "제어 문자" })).toBeVisible();
   await expect(nameField(page)).toBeVisible();
   await nameField(page).fill("테스트 생일");
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.locator('[data-panel-id="hero-left"]')).toHaveClass(/populated/);
 
   await page.getByRole("button", { name: "저장하고 링크 만들기", exact: true }).click();
   await expect(page.getByRole("heading", { name: "링크를 복사하세요.", exact: true })).toBeFocused();
   await expect(page.locator(".world-link")).toBeVisible();
+  await expect(page.locator(".link-expiry")).toHaveText("링크는 저장 후 24시간 동안만 유효합니다. 이후에는 링크가 만료되고 사진도 삭제됩니다.");
+  await expect(page.getByRole("img", { name: "월드의 생일 사진 설정 패널에 있는 아틀라스 이미지 URL 입력칸과 적용 버튼" })).toBeVisible();
+  await expect.poll(() => page.locator(".world-input-shot img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   await expect(page.locator(".scene-workspace")).not.toBeVisible();
   await page.screenshot({ path: "artifacts/screenshots/step-link-desktop.png", fullPage: true });
   const firstLink = await page.getByLabel("VRChat용 이미지 링크", { exact: true }).inputValue();
@@ -216,7 +223,7 @@ test("step flow focuses each task, preserves edits and hides stale links", async
   await nameField(page).fill("테스트 생일 수정");
   await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
   await expect(page.locator(".world-link")).not.toBeVisible();
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: "변경 사항 저장", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const secondLink = await page.getByLabel("VRChat용 이미지 링크", { exact: true }).inputValue();
@@ -272,7 +279,7 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
   const editLink = page.url();
   const id = new URL(editLink).pathname.split("/").pop()!;
   await nameField(page).fill("멜비의 생일");
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await chooseFileFrom(
     page,
     page.getByRole("button", {
@@ -505,7 +512,7 @@ test("nickname changes hide stale links until save and reuse the existing PNG", 
   await nameField(page).fill(name);
   await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
   await expect(page.locator(".world-link")).not.toBeVisible();
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const updated = new URL(await linkField.inputValue());
@@ -523,7 +530,7 @@ test("nickname changes hide stale links until save and reuse the existing PNG", 
   await openNameStep(page);
   await nameField(page).fill("");
   await expect(page.getByRole("button", { name: "3. 링크 복사", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   expect(new URL(await linkField.inputValue()).searchParams.get("name")).toBe("");
@@ -560,7 +567,7 @@ test("Load accepts a world PNG URL with encoded nickname and preserves edit auth
   await page.goto("/");
   await page.getByRole("button", { name: "새로 만들기", exact: true }).click();
   await nameField(page).fill("설보&pea");
-  await page.getByRole("button", { name: "사진 등록하기", exact: true }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const originalEdit = page.url();

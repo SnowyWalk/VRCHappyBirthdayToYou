@@ -62,3 +62,8 @@ Keep the editable album UUID; changed photo content produces an immutable 2048×
 - Responsive: full-width three-item navigation at 360px; >=44px targets. Only the photo step has the fixed mobile save bar; safe-area padding prevents overlap. Name and copy actions remain in normal flow. Copy button >=56px high. Light/dark reuse existing tokens.
 - Mobile spatial discovery: retain the initial HAPPY BIRTHDAY landmark and add an explicit 패널 보기 button on each wall. It scrolls to that wall's stage-side photo target; directional controls and swipe reveal the remaining panels. Validate that the target is inside the viewport, and keep the image transforms unchanged.
 - Success checks: optional name, validation, photo selection/drop, backward draft retention, save failure/retry, saved-album reentry, disabled stale copy, keyboard focus, mobile overflow, copy fallback, expiry and deletion.
+
+## Link guidance update (2026-10-10)
+- Name step action is 다음; photo constraints and retention are always visible, never in a disclosure.
+- Link step uses a 24-hour duration instead of an exact expiry date: 링크는 저장 후 24시간 동안만 유효합니다. 이후에는 링크가 만료되고 사진도 삭제됩니다.
+- Show the real captured 생일 사진 설정 board beside the link, visually highlighting the 아틀라스 이미지 URL row and 적용 button. Screenshot source: Birthday world/Captures/AtlasUrlLock_Kiosk.png; Unity scene is not modified. Crop for display with CSS to remove unrelated credits and setup-status text.

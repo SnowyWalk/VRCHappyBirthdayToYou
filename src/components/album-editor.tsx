@@ -9,6 +9,7 @@ import {
   Save,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,12 +81,6 @@ export function AlbumEditor({ id }: { id: string }) {
     } catch (error) { setError((error as Error).message); setBusy(false); }
   }
   const worldUrl = withNickname(dataUrl, album?.nickname ?? "");
-  const expiryText = album?.expiresAt
-    ? new Intl.DateTimeFormat("ko-KR", {
-        dateStyle: "short",
-        timeStyle: "short",
-      }).format(new Date(album.expiresAt))
-    : "";
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -382,7 +377,7 @@ export function AlbumEditor({ id }: { id: string }) {
               <p id="name-help">입력한 이름이 월드에 표시됩니다. 비워 두어도 계속할 수 있어요.</p>
             </div>
             <Button type="submit" size="lg" disabled={busy} className="next-step-button">
-              사진 등록하기 <ArrowRight size={18} />
+              다음 <ArrowRight size={18} />
             </Button>
           </form>
         </section>}
@@ -412,10 +407,10 @@ export function AlbumEditor({ id }: { id: string }) {
                 }} disabled={busy}
               />
               <p className="gallery-empty-note">모든 칸을 채울 필요는 없어요. 사진이 없는 패널은 월드에서 자동으로 제거됩니다.</p>
-              <details className="photo-requirements">
-                <summary>사진 형식과 보관 기간</summary>
+              <div className="photo-requirements">
+                <p className="photo-requirements-title">사진 형식과 보관 기간</p>
                 <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 최대 4천만 픽셀 · 업로드 전 최대 2048px로 자동 축소 · 저장 후 24시간 보관</p>
-              </details>
+              </div>
             </section>
             <div className="controller-inspector">
               <div className="controller-save">
@@ -434,8 +429,9 @@ export function AlbumEditor({ id }: { id: string }) {
           onChange={(e) => { void choose(e.target.files?.[0], uploadPanel.current); e.target.value = ""; }} />
         {step === 3 && dataUrl && <section className="link-step" aria-labelledby="link-heading">
           <h1 ref={stageHeading} tabIndex={-1} id="link-heading">링크를 복사하세요.</h1>
-          <p className="link-instruction">복사한 링크를 월드의 입력칸에 붙여넣으세요.</p>
+          <p className="link-instruction">월드의 ‘생일 사진 설정’ 패널에 붙여넣고 ‘적용’을 누르세요.</p>
           <div className="save-state" role="status"><span />모든 변경 사항 저장됨</div>
+          <div className="link-result-layout">
           <div className="world-link" aria-label="월드에 적용할 링크">
             <label htmlFor="world-url">월드에 붙여 넣을 링크</label>
             <Input id="world-url" aria-label="VRChat용 이미지 링크" readOnly value={worldUrl} onFocus={(e) => e.target.select()} />
@@ -443,7 +439,17 @@ export function AlbumEditor({ id }: { id: string }) {
               {copied === "data" ? <Check size={20} /> : <Copy size={20} />}
               {copied === "data" ? "복사했어요" : "링크 복사"}
             </Button>
-            <p className="link-expiry">{expiryText ? `${expiryText}까지 사용 가능 · 이후 사진과 링크가 자동 삭제됩니다.` : "사진과 링크는 저장 후 24시간 뒤 자동 삭제됩니다."}</p>
+            <p className="link-expiry">링크는 저장 후 24시간 동안만 유효합니다. 이후에는 링크가 만료되고 사진도 삭제됩니다.</p>
+          </div>
+          <figure className="world-paste-guide">
+            <div className="world-input-shot">
+              <Image src="/world-input-panel.webp" width={1080} height={1280}
+                alt="월드의 생일 사진 설정 패널에 있는 아틀라스 이미지 URL 입력칸과 적용 버튼"
+                sizes="(max-width: 700px) 100vw, 600px" />
+              <span className="world-input-highlight" aria-hidden="true" />
+            </div>
+            <figcaption>아틀라스 이미지 URL 입력칸에 붙여넣고 <strong>적용</strong>을 누르세요.</figcaption>
+          </figure>
           </div>
           <Button variant="outline" className="edit-photos-button" onClick={() => goToStep(2)} disabled={busy}><ArrowLeft size={16} />사진 수정하기</Button>
         </section>}

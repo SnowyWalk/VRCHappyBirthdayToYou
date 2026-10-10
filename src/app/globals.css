@@ -229,7 +229,7 @@ button:disabled { cursor: default; }
 .name-summary strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .gallery-empty-note { padding: 18px 16px 8px; line-height: 1.7; }
 .photo-requirements { padding: 0 16px 16px; font-size: 12px; color: #d6daf0; text-align: center; }
-.photo-requirements summary { display: list-item; list-style-position: inside; cursor: pointer; padding: 10px; min-height: 44px; }
+.photo-requirements-title { margin: 10px 0 0; font-weight: 600; }
 .photo-requirements .gallery-footnote { padding: 8px 0; line-height: 1.8; }
 .link-step > .save-state { margin-top: 16px; }
 .link-step .world-link { padding: 24px; background: var(--field); border-radius: 10px; }
@@ -262,6 +262,14 @@ button:disabled { cursor: default; }
 .name-control input, .world-link input, .header-actions a { color: var(--foreground); }
 .edit-photos-button { color: var(--foreground); background: var(--surface); border-color: var(--border); }
 .edit-photos-button:hover { background: var(--soft); }
+.link-result-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .9fr); gap: 24px; align-items: start; margin-top: 20px; }
+.link-result-layout .world-link { margin: 0; }
+.world-paste-guide { margin: 0; min-width: 0; }
+.world-input-shot { position: relative; overflow: hidden; aspect-ratio: 932 / 655; border-radius: 10px; background: #17141d; }
+.world-input-shot img { position: absolute; max-width: none; width: 115.8798%; height: auto; left: -7.9399%; top: -18.4733%; }
+.world-input-highlight { position: absolute; left: 7.4%; top: 88.4%; width: 85.2%; height: 9.2%; border: 2px solid #8ae1ff; border-radius: 4px; box-shadow: 0 0 0 2px #101828; pointer-events: none; }
+.world-paste-guide figcaption { margin-top: 12px; font-size: 13px; line-height: 1.7; color: var(--subtle); }
+@media(max-width: 700px) { .link-result-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
 .mobile-panel-help { display: none; }
 @media(max-width: 768px) {
   .scene-navigation .show-panel-button { width: auto; padding-inline: 12px; color: #fff; background: #315ddd; border-color: #315ddd; }
