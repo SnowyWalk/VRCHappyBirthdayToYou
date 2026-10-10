@@ -447,6 +447,10 @@ export function AlbumEditor({ id }: { id: string }) {
                 alt="월드의 생일 사진 설정 패널에 있는 아틀라스 이미지 URL 입력칸과 적용 버튼"
                 sizes="(max-width: 700px) 100vw, 600px" />
               <span className="world-input-highlight" aria-hidden="true" />
+              <span className="world-paste-label">링크 붙여넣기</span>
+              <svg className="world-paste-arrow" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M50 4V90M20 65L50 94L80 65" />
+              </svg>
             </div>
             <figcaption>아틀라스 이미지 URL 입력칸에 붙여넣고 <strong>적용</strong>을 누르세요.</figcaption>
           </figure>

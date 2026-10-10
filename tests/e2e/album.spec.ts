@@ -212,6 +212,7 @@ test("step flow focuses each task, preserves edits and hides stale links", async
   await expect(page.locator(".world-link")).toBeVisible();
   await expect(page.locator(".link-expiry")).toHaveText("링크는 저장 후 24시간 동안만 유효합니다. 이후에는 링크가 만료되고 사진도 삭제됩니다.");
   await expect(page.getByRole("img", { name: "월드의 생일 사진 설정 패널에 있는 아틀라스 이미지 URL 입력칸과 적용 버튼" })).toBeVisible();
+  await expect(page.getByText("링크 붙여넣기", { exact: true })).toBeVisible();
   await expect.poll(() => page.locator(".world-input-shot img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   await expect(page.locator(".scene-workspace")).not.toBeVisible();
   await page.screenshot({ path: "artifacts/screenshots/step-link-desktop.png", fullPage: true });

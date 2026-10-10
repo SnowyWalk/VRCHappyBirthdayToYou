@@ -268,6 +268,9 @@ button:disabled { cursor: default; }
 .world-input-shot { position: relative; overflow: hidden; aspect-ratio: 932 / 655; border-radius: 10px; background: #17141d; }
 .world-input-shot img { position: absolute; max-width: none; width: 115.8798%; height: auto; left: -7.9399%; top: -18.4733%; }
 .world-input-highlight { position: absolute; left: 7.4%; top: 88.4%; width: 85.2%; height: 9.2%; border: 2px solid #8ae1ff; border-radius: 4px; box-shadow: 0 0 0 2px #101828; pointer-events: none; }
+.world-paste-label { position: absolute; left: 39%; top: 65%; transform: translateX(-50%); padding: 5px 10px; border-radius: 6px; background: #8ae1ff; color: #101828; font-size: clamp(12px, 1.1vw, 15px); font-weight: 700; line-height: 1.3; white-space: nowrap; box-shadow: 0 2px 6px #10182880; pointer-events: none; }
+.world-paste-arrow { position: absolute; left: 34%; top: 77%; width: 10%; height: 13%; overflow: visible; color: #8ae1ff; filter: drop-shadow(0 1px 2px #101828); pointer-events: none; }
+.world-paste-arrow path { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .world-paste-guide figcaption { margin-top: 12px; font-size: 13px; line-height: 1.7; color: var(--subtle); }
 @media(max-width: 700px) { .link-result-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
 .mobile-panel-help { display: none; }

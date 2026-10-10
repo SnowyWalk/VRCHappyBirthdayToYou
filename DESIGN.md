@@ -67,3 +67,4 @@ Keep the editable album UUID; changed photo content produces an immutable 2048×
 - Name step action is 다음; photo constraints and retention are always visible, never in a disclosure.
 - Link step uses a 24-hour duration instead of an exact expiry date: 링크는 저장 후 24시간 동안만 유효합니다. 이후에는 링크가 만료되고 사진도 삭제됩니다.
 - Show the real captured 생일 사진 설정 board beside the link, visually highlighting the 아틀라스 이미지 URL row and 적용 button. Screenshot source: Birthday world/Captures/AtlasUrlLock_Kiosk.png; Unity scene is not modified. Crop for display with CSS to remove unrelated credits and setup-status text.
+- Add a contrasting 링크 붙여넣기 callout and arrow pointing to the URL input; keep the input and 적용 button unobstructed at desktop and mobile sizes.
