@@ -76,7 +76,7 @@ Keep the editable album UUID; changed photo content produces an immutable 2048×
 
 ## Desktop UX revision (2026-10-10)
 - PC use takes priority. Overlay Create/Load near the bottom of the main preview, where they do not cover the stage landmark. A dark gradient keeps controls readable in either theme. Keep recent names/count/time and a trash control; omit visible UUIDs. Deletion action is 삭제; confirmation explains permanent removal. Load label is 월드에 사용한 링크.
-- Wall headers show a small overview highlighting the relevant half and specify 무대를 바라본 왼쪽/오른쪽. Preserve actual panel geometry. Exclude UI layer22 from wall captures so world UI text does not float over the scene.
+- Omit the wall overview thumbnail and left/right title strip; desktop wall photos continue directly into one another. Keep compact navigation only at narrow widths. Preserve actual panel geometry. Exclude UI layer22 from wall captures so world UI text does not float over the scene.
 - Nonmatching photos open 사진 맞추기 with crop/contain, landscape/portrait and crop positioning. Preview and encoding use the same framing; originals stay local. Cancellation preserves earlier photo. Existing file/pixel safety and bounded2048 output remain.
 - Photo errors appear with the corresponding wall and a 다시 선택 action without jumping to page top.
 - Final instruction: paste into the URL input and confirm the VRChat text entry dialog; automatic application does not require the kiosk 적용 button.

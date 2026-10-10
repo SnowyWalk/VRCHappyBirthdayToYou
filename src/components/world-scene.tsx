@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Plus, Check, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { PANELS, type PanelId } from "@/lib/panels";
-import { WORLD_VIEWS, WORLD_OVERVIEW, panelLocation, panelTransform } from "@/lib/world-view";
+import { WORLD_VIEWS, panelLocation, panelTransform } from "@/lib/world-view";
 
 type SceneProps = {
   photos?: Partial<Record<PanelId, string | null>>;
@@ -47,13 +47,6 @@ function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled
   const scale = width / view.width;
   return <section className="wall-view" data-world-side={view.side} aria-label={left ? "왼쪽 패널" : "오른쪽 패널"}>
     <div className="scene-view-heading">
-      <div className="wall-location">
-        <div className={`wall-map ${view.side}`} aria-hidden="true">
-          <Image src={WORLD_OVERVIEW.image} width={1160} height={640} alt="" unoptimized />
-          <span />
-        </div>
-        <h3>무대를 바라본 {left ? "왼쪽" : "오른쪽"}</h3>
-      </div>
       <div className="scene-navigation" aria-label={`${left ? "왼쪽" : "오른쪽"} 전경 이동`}>
         <button type="button" className="show-panel-button" onClick={showPanel}>패널 보기</button>
         <button type="button" aria-label="왼쪽으로 이동" onClick={() => move(!left)}><ChevronLeft size={15} /></button>

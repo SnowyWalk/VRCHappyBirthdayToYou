@@ -119,18 +119,12 @@ button:disabled { cursor: default; }
 .scene-instruction > span > span { font-size: 11px; color: #bcabbf; margin-left: 5px; }
 .world-scene { min-width: 0; }
 .wall-view + .wall-view { border-top: 1px solid #4a415c; }
-.scene-view-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px; }
-.scene-view-heading h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.scene-view-heading { display: none; }
 .scene-navigation { display: none; }
 .scene-viewport { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .world-render { position: relative; overflow: hidden; }
 .world-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 .world-canvas > img { pointer-events: none; user-select: none; }
-.wall-location { display: flex; align-items: center; gap: 12px; }
-.wall-map { width: 96px; height: 53px; position: relative; overflow: hidden; border-radius: 5px; }
-.wall-map img { width: 100%; height: 100%; object-fit: cover; }
-.wall-map span { position: absolute; inset: 0 50% 0 0; border: 2px solid #8ae1ff; background: #8ae1ff30; }
-.wall-map.right span { inset: 0 0 0 50%; }
 .panel-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; background: #51242f; color: #fff; font-size: 13px; line-height: 1.6; }
 .panel-error button { flex-shrink: 0; padding: 8px 12px; border: 1px solid #ffffff80; border-radius: 6px; font-weight: 600; }
 .scene-panel { position: absolute; top: 0; left: 0; width: 200px; height: 112.5px; transform-origin: 0 0; padding: 0; border: 3px solid #e8ecff; border-radius: 0; background: #101828dc; color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -171,9 +165,7 @@ button:disabled { cursor: default; }
   .controller-save { justify-content: space-between; }
 }
 @media(max-width: 768px) {
-  .wall-map { display: none; }
-  .wall-location h3 { font-size: 12px; }
-  .scene-view-heading { padding: 8px 14px; }
+  .scene-view-heading { display: flex; justify-content: flex-end; padding: 8px 14px; }
   .scene-navigation { display: flex; gap: 8px; }
   .scene-navigation button { display: flex; align-items: center; justify-content: center; gap: 4px; width: 44px; height: 44px; padding: 0 10px; border: 1px solid #6c7190; border-radius: 6px; background: transparent; color: #d6daf0; font-size: 12px; }
 }
