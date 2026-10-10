@@ -2,7 +2,7 @@
   "views": [
     {
       "side": "left",
-      "image": "/world-left-fa6092967a9e.webp",
+      "image": "/world-left-ca5d6f5217c2.webp",
       "width": 1600,
       "height": 400,
       "crop": {
@@ -111,7 +111,7 @@
     },
     {
       "side": "right",
-      "image": "/world-right-cc83ba8718b0.webp",
+      "image": "/world-right-e6a3a6ad864a.webp",
       "width": 1600,
       "height": 400,
       "crop": {
@@ -220,7 +220,7 @@
     }
   ],
   "overview": {
-    "image": "/world-overview-07e2ba09ba93.webp",
+    "image": "/world-overview-d51d0db904be.webp",
     "width": 1160,
     "height": 640
   }

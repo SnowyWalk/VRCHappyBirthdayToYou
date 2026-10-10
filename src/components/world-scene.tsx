@@ -56,7 +56,7 @@ function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled
     <div className="scene-viewport" ref={viewport}>
       <div className="world-render" style={{ width, height: view.height * scale }}>
         <div className="world-canvas" style={{ width: view.width, height: view.height, transform: `scale(${scale})` }}>
-          <Image src={view.image} alt={`${left ? "왼쪽" : "오른쪽"} 사진 패널 실제 위치`} fill priority sizes="1400px" draggable={false} />
+          <Image src={view.image} alt={`${left ? "왼쪽" : "오른쪽"} 사진 패널 실제 위치`} fill priority unoptimized sizes="1400px" draggable={false} />
           {PANELS.filter(p => p.id.includes(view.side)).map(p => {
             const filled = Boolean(photos[p.id]);
             const number = PANELS.findIndex(panel => panel.id === p.id) + 1;

@@ -179,6 +179,10 @@ test("step flow focuses each task, preserves edits and hides stale links", async
   page,
   request,
 }) => {
+  await page.goto("/");
+  await expect.poll(() => page.locator(".entry-world img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(3480);
+  await page.locator(".entry-world img").evaluate((img: HTMLImageElement) => img.decode());
+  await page.screenshot({ path: "artifacts/screenshots/entry-hires-desktop.png", fullPage: true });
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
   await expect(nameField(page)).toBeFocused();
@@ -188,13 +192,14 @@ test("step flow focuses each task, preserves edits and hides stale links", async
 
   await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.getByRole("heading", { name: "사진을 등록하세요.", exact: true })).toBeFocused();
-  await expect(page.getByText("사진 형식과 보관 기간", { exact: true })).toBeVisible();
+  await expect(page.getByText("사진 형식과 보관 기간", { exact: true })).toHaveCount(0);
   await expect(page.locator(".gallery-footnote")).toBeVisible();
   await expect(page.locator(".gallery-footnote")).toContainText("저장 후 24시간 보관");
   await expect(nameField(page)).not.toBeVisible();
   await chooseFileFrom(page, page.locator('[data-panel-id="hero-left"]'), landscapeImage);
   await expect(page.locator('[data-panel-id="hero-left"]')).toHaveClass(/populated/);
   await expect.poll(() => page.locator(".world-canvas > img").evaluateAll((images: HTMLImageElement[]) => images.every(img => img.complete && img.naturalWidth > 0))).toBe(true);
+  await expect(page.locator(".world-canvas > img").first()).toHaveJSProperty("naturalWidth", 4800);
   await page.screenshot({ path: "artifacts/screenshots/step-photos-desktop.png", fullPage: true });
 
   await openNameStep(page);

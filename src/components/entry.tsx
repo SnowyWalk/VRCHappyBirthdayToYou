@@ -36,7 +36,7 @@ export function Entry() {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
   async function removeAlbum(album: RecentAlbum) {
-    if (busy || !window.confirm("이 앨범의 사진과 링크를 서버에서 삭제할까요? 삭제한 데이터는 복구할 수 없습니다.")) return;
+    if (busy || !window.confirm("등록한 사진과 링크를 삭제할까요? 삭제한 데이터는 복구할 수 없습니다.")) return;
     setBusy(true);
     setError("");
     try {
@@ -104,6 +104,7 @@ export function Entry() {
             alt="Birthday World의 생일 홀과 사진 갤러리"
             fill
             priority
+            unoptimized
             sizes="100vw"
           />
           <div className="entry-content">
@@ -149,7 +150,7 @@ export function Entry() {
               {formatRelativeTime(album.updatedAt, now)}
             </time> : <span className="recent-unsaved">아직 저장하지 않음</span>}
             <button type="button" className="recent-delete" disabled={busy}
-              aria-label={`${album.nickname || album.id} 앨범 삭제`} title="서버에서 앨범 삭제" onClick={() => void removeAlbum(album)}><X size={16} /></button>
+              aria-label={`${album.nickname || album.id} 사진과 링크 삭제`} title="사진과 링크 삭제" onClick={() => void removeAlbum(album)}><X size={16} /></button>
           </li>)}</ul>
         </section>}
         {error && !open && (

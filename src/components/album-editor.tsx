@@ -71,7 +71,7 @@ export function AlbumEditor({ id }: { id: string }) {
   const objectUrls = useRef(new Set<string>());
   const choosingPhoto = useRef(false);
   async function deleteCurrentAlbum() {
-    if (busy || !window.confirm("이 앨범의 사진과 링크를 서버에서 삭제할까요? 저장하지 않은 변경 사항도 사라지며, 삭제한 데이터는 복구할 수 없습니다.")) return;
+    if (busy || !window.confirm("등록한 사진과 링크를 삭제할까요? 저장하지 않은 변경 사항도 사라지며, 삭제한 데이터는 복구할 수 없습니다.")) return;
     setBusy(true);
     setError("");
     try {
@@ -386,7 +386,6 @@ export function AlbumEditor({ id }: { id: string }) {
             <div>
               <h1 ref={stageHeading} tabIndex={-1}>사진을 등록하세요.</h1>
               <p>사진을 넣을 패널을 누르거나, 사진을 끌어다 놓으세요.</p>
-              <p className="photo-ratio-help">가로 16:9 또는 세로 9:16 사진을 사용할 수 있어요.</p>
               <p className="mobile-panel-help">전경을 옆으로 밀거나 ‘패널 보기’를 눌러 사진을 넣으세요.</p>
             </div>
             <button className="name-summary" type="button" onClick={() => goToStep(1)} disabled={busy}>
@@ -408,8 +407,7 @@ export function AlbumEditor({ id }: { id: string }) {
               />
               <p className="gallery-empty-note">모든 칸을 채울 필요는 없어요. 사진이 없는 패널은 월드에서 자동으로 제거됩니다.</p>
               <div className="photo-requirements">
-                <p className="photo-requirements-title">사진 형식과 보관 기간</p>
-                <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · JPG, PNG, WebP · 최대 4천만 픽셀 · 업로드 전 최대 2048px로 자동 축소 · 저장 후 24시간 보관</p>
+                <p className="gallery-footnote">가로 16:9 또는 세로 9:16 · 저장 후 24시간 보관</p>
               </div>
             </section>
             <div className="controller-inspector">
@@ -457,7 +455,7 @@ export function AlbumEditor({ id }: { id: string }) {
           </div>
           <Button variant="outline" className="edit-photos-button" onClick={() => goToStep(2)} disabled={busy}><ArrowLeft size={16} />사진 수정하기</Button>
         </section>}
-        <div className="editor-delete"><Button variant="ghost" className="delete-album-button" onClick={deleteCurrentAlbum} disabled={busy}>앨범 삭제</Button></div>
+        <div className="editor-delete"><Button variant="ghost" className="delete-album-button" onClick={deleteCurrentAlbum} disabled={busy}>사진과 링크 삭제</Button></div>
       </main>
     </div>
   );

@@ -229,7 +229,6 @@ button:disabled { cursor: default; }
 .name-summary strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .gallery-empty-note { padding: 18px 16px 8px; line-height: 1.7; }
 .photo-requirements { padding: 0 16px 16px; font-size: 12px; color: #d6daf0; text-align: center; }
-.photo-requirements-title { margin: 10px 0 0; font-weight: 600; }
 .photo-requirements .gallery-footnote { padding: 8px 0; line-height: 1.8; }
 .link-step > .save-state { margin-top: 16px; }
 .link-step .world-link { padding: 24px; background: var(--field); border-radius: 10px; }
@@ -256,7 +255,6 @@ button:disabled { cursor: default; }
   .edit-photos-button { width: 100%; }
 }
 
-.photo-step-heading .photo-ratio-help { margin-top: 5px; font-size: 12px; }
 @media(max-width: 700px) { .editor-main:not([data-step="2"]) { padding-bottom: calc(32px + env(safe-area-inset-bottom)); } }
 
 .name-control input, .world-link input, .header-actions a { color: var(--foreground); }

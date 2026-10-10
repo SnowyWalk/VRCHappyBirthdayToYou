@@ -34,7 +34,7 @@
 - Loading disables duplicate operations; empty panels show plus; errors preserve edits; saved state shows timestamp.
 - Save conflicts ask for reload through an explicit error; network failures allow retry.
 ## Content voice
-- Only necessary Korean control, action and result text. Name: 생일자의 이름 (optional; Enter advances). Gallery: 사진을 넣을 패널을 누르세요. Help: 가로 16:9 또는 세로 9:16 · 최대 4천만 픽셀; 업로드 전 최대 2048px로 자동 축소. Save: 저장하고 링크 만들기 / 변경 사항 저장. Copy: 월드에 붙여 넣을 링크 / 링크 복사. No emotional headings, taglines, marketing description or infrastructure terms.
+- Only necessary Korean control, action and result text. Name: 생일자의 이름 (optional; Enter advances). Gallery: 사진을 넣을 패널을 누르세요. Help below the scene: 가로 16:9 또는 세로 9:16 · 저장 후 24시간 보관. Save: 저장하고 링크 만들기 / 변경 사항 저장. Copy: 월드에 붙여 넣을 링크 / 링크 복사. No emotional headings, taglines, marketing description or infrastructure terms.
 ## Implementation constraints
 - Next.js App Router, TypeScript, shadcn/ui, Tailwind CSS v4. Persistent Node server filesystem.
 - Verify lint, types, build, API deduplication and browser create/save/load flows.
@@ -68,3 +68,8 @@ Keep the editable album UUID; changed photo content produces an immutable 2048×
 - Link step uses a 24-hour duration instead of an exact expiry date: 링크는 저장 후 24시간 동안만 유효합니다. 이후에는 링크가 만료되고 사진도 삭제됩니다.
 - Show the real captured 생일 사진 설정 board beside the link, visually highlighting the 아틀라스 이미지 URL row and 적용 button. Screenshot source: Birthday world/Captures/AtlasUrlLock_Kiosk.png; Unity scene is not modified. Crop for display with CSS to remove unrelated credits and setup-status text.
 - Add a contrasting 링크 붙여넣기 callout and arrow pointing to the URL input; keep the input and 적용 button unobstructed at desktop and mobile sizes.
+
+## Image clarity and concise controls (2026-10-10)
+- Render the same camera framing at 4800×2700; publish lossless WebP crops (walls 4800×1200, overview 3480×1920). Keep logical coordinates unchanged; serve these static assets without Next image recompression.
+- Deletion action is 사진과 링크 삭제 in both the editor and recent links.
+- Remove the repeated ratio sentence above the scene and the help heading, file extensions, pixel limit and resizing explanation. Preserve concise ratio/24-hour guidance below the scene and actionable validation errors.

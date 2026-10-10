@@ -6,10 +6,11 @@ test("recent and editor deletion require confirmation and invalidate server link
   async function createSaved(name: string) {
     await page.goto("/");
     await page.getByRole("button", { name: "새로 만들기", exact: true }).click();
-    await expect(page.getByLabel("생일자의 이름")).toBeVisible();
-    await expect(page.locator(".gallery-empty-note")).toHaveText("사진을 넣지 않은 패널은 월드에서 자동으로 제거됩니다.");
+    await expect(page.getByRole("textbox", { name: "생일자의 이름" })).toBeVisible();
     const id = new URL(page.url()).pathname.split("/").pop()!;
-    await page.getByLabel("생일자의 이름").fill(name);
+    await page.getByRole("textbox", { name: "생일자의 이름" }).fill(name);
+    await page.getByRole("button", { name: "다음", exact: true }).click();
+    await expect(page.locator(".gallery-empty-note")).toHaveText("모든 칸을 채울 필요는 없어요. 사진이 없는 패널은 월드에서 자동으로 제거됩니다.");
     const photo = await sharp(randomBytes(160 * 90 * 3), { raw: { width: 160, height: 90, channels: 3 } }).png().toBuffer();
     const chooser = page.waitForEvent("filechooser");
     await page.locator('[data-panel-id="hero-left"]').click();
@@ -21,7 +22,7 @@ test("recent and editor deletion require confirmation and invalidate server link
   }
   const first = await createSaved("목록에서 삭제");
   await page.goto("/");
-  const recentDelete = page.getByRole("button", { name: "목록에서 삭제 앨범 삭제", exact: true });
+  const recentDelete = page.getByRole("button", { name: "목록에서 삭제 사진과 링크 삭제", exact: true });
   await expect(recentDelete).toBeVisible();
   page.once("dialog", dialog => dialog.dismiss());
   await recentDelete.click();
@@ -35,7 +36,7 @@ test("recent and editor deletion require confirmation and invalidate server link
   await page.setViewportSize({ width: 360, height: 780 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
   page.once("dialog", dialog => dialog.accept());
-  await page.getByRole("button", { name: "앨범 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "사진과 링크 삭제", exact: true }).click();
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("region", { name: "최근 편집 링크", exact: true })).toHaveCount(0);
   expect((await request.get(`/data/${second.id}`)).status()).toBe(404);
@@ -45,7 +46,7 @@ test("recent and editor deletion require confirmation and invalidate server link
 test("an expiring recent link disappears without reloading the page", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "새로 만들기", exact: true }).click();
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "생일자의 이름" })).toBeVisible();
   await page.goto("/");
   const region = page.getByRole("region", { name: "최근 편집 링크", exact: true });
   await expect(region.getByRole("link")).toHaveCount(1);
