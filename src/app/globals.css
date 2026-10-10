@@ -71,14 +71,15 @@ button:disabled { cursor: default; }
 .dark .theme-toggle .theme-sun { display: block; }
 .controller-main { max-width: 1400px; margin: 0 auto; padding: 12px 32px 36px; }
 .entry-controller { padding-top: 0; }
-.entry-world { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.entry-world { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .entry-world > img { width: 100%; height: auto; aspect-ratio: 1160/640; object-fit: contain; pointer-events: none; }
-.entry-content { order: -1; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; }
-.entry-expiry-note { flex-basis: 100%; margin: 0; color: var(--subtle); font-size: 12px; text-align: center; }
+.entry-content { position: absolute; inset: auto 0 0; padding: 72px 28px 28px; display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; background: linear-gradient(transparent, rgb(8 10 22 / 85%)); }
+.entry-expiry-note { order: 3; flex-basis: 100%; margin: 0; color: #e3e5ef; font-size: 12px; text-align: center; }
 .entry-content .create-button { width: 320px; height: 68px; border-radius: 8px; background: #315ddd; color: #fff; font-size: 18px; font-weight: 600; gap: 24px; }
 .entry-content .create-button:hover { background: #244bbb; }
 .entry-content .create-button svg { order: 2; width: 20px; height: 20px; }
-.entry-content .load-button { color: var(--subtle); height: 44px; font-size: 14px; }
+.entry-content .load-button { color: #fff; background: rgb(8 10 22 / 65%); border: 1px solid rgb(255 255 255 / 35%); height: 44px; font-size: 14px; }
+.entry-content .load-button:hover { color: #fff; background: rgb(35 40 59 / 90%); }
 .entry-controller > .error-message { text-align: center; }
 .recent-albums { margin-top: 24px; padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .recent-albums h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
@@ -178,6 +179,7 @@ button:disabled { cursor: default; }
 }
 @media(max-width: 700px) {
   .entry-content { flex-direction: column; gap: 10px; padding: 18px; }
+  .entry-world > img { min-height: 360px; object-fit: cover; }
   .entry-expiry-note { order: 3; font-size: 11px; line-height: 1.6; }
   .entry-content .create-button { width: 100%; min-height: 64px; }
   .controller-header { height: 64px; padding: 0 18px; }
