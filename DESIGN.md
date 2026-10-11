@@ -80,3 +80,4 @@ Keep the editable album UUID; changed photo content produces an immutable 2048×
 - Nonmatching photos open 사진 맞추기 with crop/contain, landscape/portrait and crop positioning. Preview and encoding use the same framing; originals stay local. Cancellation preserves earlier photo. Existing file/pixel safety and bounded2048 output remain.
 - Photo errors appear with the corresponding wall and a 다시 선택 action without jumping to page top.
 - Final instruction: paste into the URL input and confirm the VRChat text entry dialog; automatic application does not require the kiosk 적용 button.
+- Panel photos have no visible L1–L4/R1–R4 badges. Keep accessible button names for selecting and removing the correct photo.

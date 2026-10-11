@@ -137,7 +137,6 @@ button:disabled { cursor: default; }
 .panel-remove { position: absolute; width: 44px; height: 44px; display: grid; place-items: center; background: #080d19dc; color: white; border: 1px solid #e8ecff; border-radius: 6px; }
 .panel-remove:hover { background: #7f1d1d; }
 .panel-remove:focus-visible { outline: 3px solid white; }
-.panel-badge { position: absolute; top: 7px; left: 7px; padding: 3px 6px; background: #080d19dc; color: #fff; font-size: 20px; font-weight: 600; line-height: 1.15; }
 .panel-filled { position: absolute; bottom: 7px; right: 7px; display: grid; place-items: center; width: 25px; height: 25px; color: #fff; background: #174bbd; border-radius: 50%; }
 .gallery-footnote { text-align: center; color: #b8a4bf; font-size: 12px; margin: 0; padding: 12px 16px; }
 .controller-inspector { padding: 21px 27px 18px; display: flex; justify-content: flex-end; }

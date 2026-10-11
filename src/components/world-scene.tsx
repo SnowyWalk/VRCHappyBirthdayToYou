@@ -87,7 +87,6 @@ function WallView({ view, photos = {}, onSelect, onRemove, onDropPhoto, disabled
               }}
               onClick={() => onSelect?.(p.id)}>
               {filled ? <Image src={photos[p.id]!} alt="" fill unoptimized sizes="350px" draggable={false} /> : <Plus size={30} strokeWidth={2} />}
-              <span className="panel-badge">{panelLocation(p.id)}</span>
               {filled && <span className="panel-filled"><Check size={16} /></span>}
             </button>
               {filled && onRemove && <button type="button" className="panel-remove" disabled={disabled}
