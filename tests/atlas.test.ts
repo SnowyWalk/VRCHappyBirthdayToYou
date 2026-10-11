@@ -31,6 +31,7 @@ registerHooks?.({
 const {
   decodeAtlasHeaderFromPng,
   encodeAtlas,
+  extractAtlasPhoto,
   normalizeAtlasNickname,
   validateAtlasPhoto,
 }: AtlasModule = await import(
@@ -101,6 +102,8 @@ test("writes a lossless 2048-bit header grid into the top 64 PNG pixels", async 
 
   assert.equal(metadata.width, 2048);
   assert.equal(metadata.height, 2048);
+  assert.equal(metadata.channels, 3);
+  assert.equal(metadata.hasAlpha, false);
   assert.equal(metadata.space, "srgb");
   assert.deepEqual(restored, header);
 });
@@ -134,6 +137,92 @@ test("stores portrait photos clockwise and recovers original corner order", asyn
   assertPixelNear(recovered, recovered.info.width - 1, 0, [0, 255, 0]);
   assertPixelNear(recovered, 0, recovered.info.height - 1, [0, 0, 255]);
   assertPixelNear(recovered, recovered.info.width - 1, recovered.info.height - 1, [255, 255, 0]);
+});
+
+test("extracts active atlas photos as exact-ratio PNGs", async () => {
+  const landscape = await makePanelPhoto(160, 90, "#cc2244");
+  const portrait = await makePanelPhoto(90, 160, "#2255cc");
+  const { png } = await encodeAtlas({
+    nickname: "Extract",
+    revision: 4,
+    photos: [
+      { panelId: 1, bytes: landscape },
+      { panelId: 4, bytes: portrait },
+    ],
+  });
+
+  const extractedLandscape = await sharp(await extractAtlasPhoto(png, 1))
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const extractedPortrait = await sharp(await extractAtlasPhoto(png, 4))
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  assert.equal(extractedLandscape.info.channels, 3);
+  assert.equal(extractedPortrait.info.channels, 3);
+  assert.equal(extractedLandscape.info.width * 9, extractedLandscape.info.height * 16);
+  assert.equal(extractedPortrait.info.width * 16, extractedPortrait.info.height * 9);
+  assertPixelNear(
+    extractedLandscape,
+    Math.floor(extractedLandscape.info.width / 2),
+    Math.floor(extractedLandscape.info.height / 2),
+    [204, 34, 68],
+  );
+  assertPixelNear(
+    extractedPortrait,
+    Math.floor(extractedPortrait.info.width / 2),
+    Math.floor(extractedPortrait.info.height / 2),
+    [34, 85, 204],
+  );
+});
+
+test("extracts rotated records back to their original orientation", async () => {
+  const portrait = await makeCornerPhoto(1143, 2032);
+  const { png } = await encodeAtlas({
+    nickname: "Rotated extract",
+    revision: 5,
+    photos: [{ panelId: 0, bytes: portrait }],
+  });
+
+  const recovered = await sharp(await extractAtlasPhoto(png, 0))
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  assert.equal(recovered.info.width, 1143);
+  assert.equal(recovered.info.height, 2032);
+  assertPixelNear(recovered, 0, 0, [255, 0, 0]);
+  assertPixelNear(recovered, recovered.info.width - 1, 0, [0, 255, 0]);
+  assertPixelNear(recovered, 0, recovered.info.height - 1, [0, 0, 255]);
+  assertPixelNear(recovered, recovered.info.width - 1, recovered.info.height - 1, [255, 255, 0]);
+});
+
+test("extracts rotated leftover landscape records and rejects empty panels", async () => {
+  const landscape = await makePanelPhoto(160, 90, "#33aa55");
+  const { png, records } = await encodeAtlas({
+    nickname: "Leftover",
+    revision: 6,
+    photos: [
+      { panelId: 0, bytes: await makePanelPhoto(160, 90, "#111111") },
+      { panelId: 1, bytes: await makePanelPhoto(160, 90, "#222222") },
+      { panelId: 2, bytes: landscape },
+    ],
+  });
+
+  assert.equal(records[2].rotatedClockwise, true);
+
+  const extracted = await sharp(await extractAtlasPhoto(png, 2))
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  assert.equal(extracted.info.width, 1296);
+  assert.equal(extracted.info.height, 729);
+  assertPixelNear(
+    extracted,
+    Math.floor(extracted.info.width / 2),
+    Math.floor(extracted.info.height / 2),
+    [51, 170, 85],
+  );
+  await assert.rejects(() => extractAtlasPhoto(png, 7), /사진이 없습니다/);
 });
 
 test("prefers matching rectangles before rotating leftover photos", async () => {
@@ -315,13 +404,13 @@ function gutterOverlaps(left: AtlasPanelRecord, right: AtlasPanelRecord) {
   );
 }
 
-async function makePanelPhoto(width: number, height: number) {
+async function makePanelPhoto(width: number, height: number, color = "#88aadd") {
   return sharp({
     create: {
       width,
       height,
       channels: 3,
-      background: "#88aadd",
+      background: color,
     },
   })
     .png()

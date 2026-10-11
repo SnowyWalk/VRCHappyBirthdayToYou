@@ -138,6 +138,7 @@ export async function encodeAtlas(input: {
     },
   })
     .composite(composites)
+    .removeAlpha()
     .png({ palette: false, compressionLevel: 9 })
     .toBuffer();
 
@@ -194,6 +195,39 @@ export async function decodeAtlasHeaderFromPng(bytes: Uint8Array) {
   }
 
   return header;
+}
+
+export async function extractAtlasPhoto(bytes: Uint8Array, panelId: number): Promise<Buffer> {
+  if (!Number.isInteger(panelId) || panelId < 0 || panelId > 7) {
+    throw new Error("아틀라스 패널 ID가 올바르지 않습니다.");
+  }
+
+  const header = await decodeAtlasHeaderFromPng(bytes);
+  const record = parseAtlasHeader(header).records[panelId];
+
+  if (!record.active) {
+    throw new Error("해당 패널에는 사진이 없습니다.");
+  }
+
+  const { default: sharp } = await import("sharp");
+  let pipeline = sharp(Buffer.from(bytes), { limitInputPixels: ATLAS_SIZE * ATLAS_SIZE })
+    .extract({
+      left: record.x,
+      top: record.y,
+      width: record.width,
+      height: record.height,
+    });
+
+  if (record.rotatedClockwise) {
+    pipeline = pipeline.rotate(-90);
+  }
+
+  return pipeline
+    .toColourspace("srgb")
+    .flatten({ background: { r: 24, g: 22, b: 28 } })
+    .removeAlpha()
+    .png({ palette: false, compressionLevel: 9 })
+    .toBuffer();
 }
 
 async function decodePhotos(photos: PhotoInput[]): Promise<DecodedPhoto[]> {
@@ -376,6 +410,60 @@ function buildHeader(input: {
 
   header.writeUInt32LE(crc32IsoHdlc(header.subarray(0, 252)), 252);
   return header;
+}
+
+function parseAtlasHeader(header: Buffer) {
+  if (header.length !== HEADER_LENGTH || header.toString("ascii", 0, 4) !== "BWAT") {
+    throw new Error("BWAT 헤더가 올바르지 않습니다.");
+  }
+
+  if (
+    header[4] !== 1 ||
+    header.readUInt16LE(12) !== ATLAS_SIZE ||
+    header.readUInt16LE(14) !== ATLAS_SIZE ||
+    header.readUInt16LE(16) !== DATA_HEIGHT ||
+    header.readUInt16LE(18) !== RECORD_LENGTH
+  ) {
+    throw new Error("지원하지 않는 BWAT 헤더입니다.");
+  }
+
+  if (header.readUInt32LE(252) !== crc32IsoHdlc(header.subarray(0, 252))) {
+    throw new Error("BWAT 헤더 체크섬이 올바르지 않습니다.");
+  }
+
+  const records: AtlasPanelRecord[] = Array.from({ length: 8 }, (_, index) => {
+    const offset = 20 + index * RECORD_LENGTH;
+    const flags = header[offset + 1];
+
+    return {
+      panelId: header[offset],
+      active: (flags & 1) !== 0,
+      portrait: (flags & 2) !== 0,
+      rotatedClockwise: (flags & 4) !== 0,
+      x: header.readUInt16LE(offset + 2),
+      y: header.readUInt16LE(offset + 4),
+      width: header.readUInt16LE(offset + 6),
+      height: header.readUInt16LE(offset + 8),
+    };
+  });
+
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (record.panelId !== index) {
+      throw new Error("BWAT 패널 레코드가 올바르지 않습니다.");
+    }
+    if (
+      record.active &&
+      (record.width <= 0 ||
+        record.height <= 0 ||
+        record.x + record.width > ATLAS_SIZE ||
+        record.y + record.height > ATLAS_SIZE)
+    ) {
+      throw new Error("BWAT 패널 영역이 올바르지 않습니다.");
+    }
+  }
+
+  return { records };
 }
 
 async function buildPhotoComposites(

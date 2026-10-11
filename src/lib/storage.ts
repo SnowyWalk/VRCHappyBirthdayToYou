@@ -8,6 +8,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, statfs, writeFile } from "n
 import path from "node:path";
 import {
   encodeAtlas,
+  extractAtlasPhoto,
   validateAtlasPhoto,
   type AtlasPanelRecord,
 } from "./atlas";
@@ -137,7 +138,6 @@ export async function createAlbum() {
       media: {},
     };
 
-    await mkdir(path.join(getAlbumDir(id), "media"), { recursive: true });
     await writeStoredAlbum(id, stored);
 
     return { album, editToken };
@@ -184,6 +184,7 @@ export async function updateAlbum(
     }
 
     const media = { ...stored.media };
+    const uploaded = new Map<string, Uint8Array>();
     for (const image of input.images) {
       if (!isPanelId(image.panelId)) {
         throw new StorageError(400, "알 수 없는 패널입니다.");
@@ -191,13 +192,8 @@ export async function updateAlbum(
 
       const detected = await validateNewImage(image.bytes);
       const hash = sha256Bytes(image.bytes);
-      const mediaPath = getAlbumMediaPath(id, hash, detected.ext);
-
-      if (!media[hash]) {
-        await mkdir(path.dirname(mediaPath), { recursive: true });
-        await writeFileAtomic(mediaPath, Buffer.from(image.bytes));
-        media[hash] = { ...detected, size: image.bytes.byteLength };
-      }
+      uploaded.set(hash, image.bytes);
+      media[hash] = { ...detected, size: image.bytes.byteLength };
 
       panels[image.panelId] = hash;
     }
@@ -211,10 +207,8 @@ export async function updateAlbum(
       ? { atlasId: stored.album.atlasId, panelOrientations: stored.album.panelOrientations ?? getPanelOrientations(panels, media) }
       : await publishAtlas(
       id,
-      nickname,
       nextRevision,
-      panels,
-      media,
+      await collectAtlasPhotos(stored, panels, uploaded),
     );
     const now = new Date().toISOString();
     const nextStored: StoredAlbum = {
@@ -235,7 +229,16 @@ export async function updateAlbum(
 
     await renewPartyExpiry(published.atlasId, nextStored.album.expiresAt!, id);
     await writeStoredAlbum(id, nextStored);
-    await pruneUnusedMedia(id, nextStored);
+    try {
+      await pruneUnusedMedia(id, nextStored);
+      if (stored.album.atlasId && stored.album.atlasId !== published.atlasId) {
+        await removeUnreferencedAtlas(stored.album.atlasId);
+      }
+    } catch (error) {
+      // The save is already committed. The periodic sweep retries cleanup;
+      // reporting a failed save here would cause an invalid revision retry.
+      console.error("Post-save storage cleanup failed:", id, error);
+    }
     return nextStored.album;
   });
 }
@@ -288,22 +291,46 @@ export async function getMedia(id: string, hash: string) {
   assertAlbumId(id);
   assertHash(hash);
   const stored = await readStoredAlbum(id);
-  const image = stored.media[hash];
-  if (!image) {
+  if (!Object.values(stored.album.panels).includes(hash)) {
     throw new StorageError(404, "이미지를 찾을 수 없습니다.");
   }
 
-  const mediaPath = getAlbumMediaPath(id, hash, image.ext);
-  const bytes = await readFile(mediaPath).catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") {
-        throw new StorageError(404, "이미지 파일을 찾을 수 없습니다.");
-      }
-      throw error;
-    },
-  );
+  // Read the committed atlas before it can be replaced. Retry a concurrent save
+  // that removed the previous atlas between reading metadata and opening it.
+  try {
+    return { bytes: await readPhotoFromAlbum(stored, hash), contentType: "image/png" };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const latest = await readStoredAlbum(id);
+    return { bytes: await readPhotoFromAlbum(latest, hash), contentType: "image/png" };
+  }
+}
 
-  return { bytes, contentType: image.contentType };
+async function readPhotoFromAlbum(stored: StoredAlbum, hash: string, preferredPanel?: PanelId): Promise<Uint8Array> {
+  const panel = preferredPanel && stored.album.panels[preferredPanel] === hash
+    ? preferredPanel : PANELS.find(panel => stored.album.panels[panel.id] === hash)?.id;
+  if (!panel) throw new StorageError(404, "이미지를 찾을 수 없습니다.");
+  if (stored.album.atlasId) {
+    const png = await readFile(getPartyAtlasPath(stored.album.atlasId));
+    return extractAtlasPhoto(png, getPanelAtlasId(panel));
+  }
+  // Compatibility for records created before atlas publication was introduced.
+  const image = stored.media[hash];
+  if (!image) throw new StorageError(500, "사진 메타데이터가 손상되었습니다.");
+  const bytes = await readFile(getAlbumMediaPath(stored.album.id, hash, image.ext));
+  const { default: sharp } = await import("sharp");
+  return sharp(bytes).autoOrient().png().toBuffer();
+}
+
+async function collectAtlasPhotos(stored: StoredAlbum, panels: Record<PanelId, string | null>, uploaded: Map<string, Uint8Array>) {
+  const photos: { panelId: number; bytes: Uint8Array }[] = [];
+  // Restore sequentially to avoid decoding eight full atlases at once.
+  for (const panel of PANELS) {
+    const hash = panels[panel.id];
+    if (!hash) continue;
+    photos.push({ panelId: getPanelAtlasId(panel.id), bytes: uploaded.get(hash) ?? await readPhotoFromAlbum(stored, hash, panel.id) });
+  }
+  return photos;
 }
 
 export async function getPartyAtlas(hash: string) {
@@ -490,7 +517,7 @@ function getPartyMetadataPath(hash: string) {
 
 export async function resolveAtlasAlbums(hash: string): Promise<string[]> {
   assertHash(hash);
-  const metadata = await readLivePartyMetadata(hash);
+  await readLivePartyMetadata(hash);
   const ids = new Set<string>();
   // Identical PNGs can be shared by multiple albums. Include all current owners.
   const albums = await readdir(path.join(getStorageRoot(), "albums"), { withFileTypes: true });
@@ -500,7 +527,7 @@ export async function resolveAtlasAlbums(hash: string): Promise<string[]> {
       if (error instanceof StorageError && [404, 410].includes(error.status)) return null;
       throw error;
     });
-    if (stored && (stored.album.atlasId === hash || (metadata.albumIds ?? [metadata.albumId]).includes(stored.album.id))) ids.add(stored.album.id);
+    if (stored?.album.atlasId === hash) ids.add(stored.album.id);
   }
   return [...ids];
 }
@@ -559,31 +586,9 @@ function getPanelOrientationsFromRecords(records: AtlasPanelRecord[]) {
 
 async function publishAtlas(
   albumId: string,
-  nickname: string,
   revision: number,
-  panels: Record<PanelId, string | null>,
-  media: Record<string, ImageMeta>,
+  photos: { panelId: number; bytes: Uint8Array }[],
 ): Promise<PublishedAtlas> {
-  const photos = await Promise.all(
-    PANELS.flatMap((panel) => {
-      const hash = panels[panel.id];
-      if (!hash) {
-        return [];
-      }
-      const image = media[hash];
-      if (!image) {
-        throw new StorageError(500, "사진 메타데이터가 손상되었습니다.");
-      }
-
-      return [
-        readFile(getAlbumMediaPath(albumId, hash, image.ext)).then((bytes) => ({
-          panelId: getPanelAtlasId(panel.id),
-          bytes: new Uint8Array(bytes),
-        })),
-      ];
-    }),
-  );
-
   // The VRChat world reads the display name from the copied URL's ?name=
   // parameter. Keep the immutable PNG independent from nickname text.
   const atlas = await encodeAtlas({ nickname: "", revision, photos });
@@ -675,7 +680,39 @@ async function pruneUnusedMedia(id: string, stored: StoredAlbum) {
       delete stored.media[hash];
     }
   }
+  const mediaDir = path.join(getAlbumDir(id), "media");
+  if (stored.album.atlasId && await storagePathExists(mediaDir)) {
+    // Verify every live panel can be restored before discarding legacy files.
+    for (const panel of PANELS) {
+      const hash = stored.album.panels[panel.id];
+      if (hash) await readPhotoFromAlbum(stored, hash, panel.id);
+    }
+    await rm(mediaDir, { recursive: true, force: true });
+  }
   await writeStoredAlbum(id, stored);
+}
+
+async function currentAtlasOwners(hash: string): Promise<Album[]> {
+  const owners: Album[] = [];
+  for (const entry of await listStorageDirectories(path.join(getStorageRoot(), "albums"))) {
+    if (!entry.isDirectory() || !UUID_RE.test(entry.name)) continue;
+    const stored = JSON.parse(await readFile(getAlbumFilePath(entry.name), "utf8")) as StoredAlbum;
+    if (stored.album.atlasId === hash && Date.now() < getAlbumExpiry(stored.album)) owners.push(stored.album);
+  }
+  return owners;
+}
+
+async function removeUnreferencedAtlas(hash: string) {
+  const owners = await currentAtlasOwners(hash);
+  if (!owners.length) {
+    await rm(getPartyDir(hash), { recursive: true, force: true });
+    return;
+  }
+  const metadata = JSON.parse(await readFile(getPartyMetadataPath(hash), "utf8")) as PartyMetadata;
+  metadata.albumIds = owners.map(album => album.id);
+  metadata.albumId = owners[0].id;
+  metadata.expiresAt = new Date(Math.max(...owners.map(getAlbumExpiry))).toISOString();
+  await writeFileAtomic(getPartyMetadataPath(hash), Buffer.from(JSON.stringify(metadata, null, 2)));
 }
 
 async function listStorageDirectories(dir: string) {
@@ -706,7 +743,7 @@ export async function deleteAlbum(id: string, token: string) {
       const metadata = JSON.parse(await readFile(getPartyMetadataPath(entry.name), "utf8")) as PartyMetadata;
       const owners = metadata.albumIds ?? [metadata.albumId];
       if (!owners.includes(id) && metadata.albumId !== id && stored.album.atlasId !== entry.name) continue;
-      const activeOwners = remaining.filter(album => owners.includes(album.id) || album.atlasId === entry.name);
+      const activeOwners = remaining.filter(album => album.atlasId === entry.name);
       related.push({ hash: entry.name, metadata, activeOwners });
     }
     await rm(getAlbumDir(id), { recursive: true, force: true });
@@ -727,6 +764,8 @@ export async function cleanupExpiredStorage() {
     const now = Date.now();
     let albumsDeleted = 0;
     let atlasesDeleted = 0;
+    const activeAtlases = new Set<string>();
+    let albumsScanComplete = true;
     for (const entry of await listStorageDirectories(path.join(getStorageRoot(), "albums"))) {
       if (!entry.isDirectory() || !UUID_RE.test(entry.name)) continue;
       const dir = getAlbumDir(entry.name);
@@ -736,6 +775,7 @@ export async function cleanupExpiredStorage() {
           await rm(dir, { recursive: true, force: true });
           albumsDeleted++;
         } else {
+          if (stored.album.atlasId) activeAtlases.add(stored.album.atlasId);
           await pruneUnusedMedia(entry.name, stored);
           // Failed saves may leave files not committed in metadata. The save lock
           // prevents deleting an upload while it is still being published.
@@ -744,14 +784,14 @@ export async function cleanupExpiredStorage() {
             if (file.isFile() && !keep.has(file.name)) await rm(path.join(dir, "media", file.name), { force: true });
           }
         }
-      } catch (error) { console.error("Album cleanup failed:", entry.name, error); }
+      } catch (error) { albumsScanComplete = false; console.error("Album cleanup failed:", entry.name, error); }
     }
     for (const entry of await listStorageDirectories(path.join(getStorageRoot(), "parties"))) {
       if (!entry.isDirectory() || !HASH_RE.test(entry.name)) continue;
       try {
         const metadata = JSON.parse(await readFile(getPartyMetadataPath(entry.name), "utf8")) as PartyMetadata;
         const expiry = Date.parse(metadata.expiresAt ?? new Date(Date.parse(metadata.createdAt) + RETENTION_MS).toISOString());
-        if (now >= expiry) {
+        if (now >= expiry || (albumsScanComplete && !activeAtlases.has(entry.name))) {
           await rm(getPartyDir(entry.name), { recursive: true, force: true });
           atlasesDeleted++;
         }

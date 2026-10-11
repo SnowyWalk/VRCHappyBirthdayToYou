@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: Params) {
   try {
     const { id, hash } = await params;
     const image = await getMedia(id, hash);
-    return new Response(image.bytes, {
+    return new Response(new Uint8Array(image.bytes), {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Cache-Control": "no-store",

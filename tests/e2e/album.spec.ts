@@ -29,7 +29,7 @@ test("accepts an 8K source over 60MB and rejects excess pixels before decoding",
     const saved = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
     const photo = await (await request.get(`/media/${album.id}/${saved.album.panels["hero-left"]}`)).body();
     const info = await sharp(photo).metadata();
-    expect([info.width, info.height]).toEqual([2048, 1152]);
+    expect([info.width, info.height]).toEqual([2032, 1143]);
     expect(photo.length).toBeLessThan(8 * 1024 * 1024);
     const excessive = Buffer.from(landscapeImage.buffer);
     excessive.writeUInt32BE(16000, 16);
@@ -69,20 +69,21 @@ test("resizes large source photos locally and preserves portrait direction and t
     await page.getByRole("button", { name: /변경 사항 저장|저장하고 링크 만들기/, exact: true }).click();
     await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
     const saved = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
-    for (const [panel, width, height] of [["hero-left", 2048, 1152], ["hero-right", 1152, 2048], ["memory-left-0", 160, 90]] as const) {
+    for (const [panel, width, height] of [["hero-left", 1296, 729], ["hero-right", 729, 1296], ["memory-left-0", 1296, 729]] as const) {
       const media = await request.get(`/media/${album.id}/${saved.album.panels[panel]}`);
       const bytes = await media.body();
       const metadata = await sharp(bytes).metadata();
       expect(metadata.width).toBe(width);
       expect(metadata.height).toBe(height);
-      expect(metadata.format).toBe("webp");
+      expect(metadata.format).toBe("png");
       expect(bytes.length).toBeLessThan(8 * 1024 * 1024);
       expect(metadata.exif).toBeUndefined();
       if (panel === "hero-left") expect(bytes.length).toBeLessThan(original.length / 5);
       if (panel === "memory-left-0") {
-        const pixel = await sharp(bytes).raw().toBuffer();
-        expect(pixel[3]).toBeGreaterThan(120);
-        expect(pixel[3]).toBeLessThan(135);
+        const pixel = await sharp(bytes).ensureAlpha().raw().toBuffer();
+        // Saved previews come from the opaque world atlas, rather than the
+        // original transparent WebP retained on the user's device.
+        expect(pixel[3]).toBe(255);
       }
     }
     await page.reload();
@@ -115,8 +116,9 @@ async function chooseFileWithKeyboard(
   file = landscapeImage,
 ) {
   await trigger.focus();
+  await expect(trigger).toBeFocused();
   const chooserPromise = page.waitForEvent("filechooser");
-  await page.keyboard.press("Enter");
+  await trigger.press("Enter");
   const chooser = await chooserPromise;
   await chooser.setFiles(file);
   await expect(page.getByRole("status")).toHaveText("저장하지 않은 변경 사항");
@@ -313,6 +315,7 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
   expect(firstAtlas.status()).toBe(200);
   expect(firstAtlas.headers()["content-type"]).toContain("image/png");
   const firstAtlasBytes = await firstAtlas.body();
+  expect(await sharp(firstAtlasBytes).metadata()).toMatchObject({ width: 2048, height: 2048 });
   const mediaUrl = manifest.panels[0].url;
   expect((await request.get(mediaUrl)).status()).toBe(200);
   await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
@@ -339,7 +342,7 @@ test("create, select real scene panel, save repeatedly, copy and load", async ({
     /^https?:\/\/[^/]+\/party\/[a-f0-9]{64}\/atlas\.png\?name=%EB%A9%9C%EB%B9%84%EC%9D%98%20%EC%83%9D%EC%9D%BC$/,
   );
   expect(secondAtlasUrl).not.toBe(firstAtlasUrl);
-  expect(await (await request.get(firstAtlasUrl)).body()).toEqual(firstAtlasBytes);
+  expect((await request.get(firstAtlasUrl)).status()).toBe(404);
   await page
     .getByRole("button", { name: "VRChat용 이미지 링크 복사", exact: true })
     .click();
@@ -524,11 +527,11 @@ test("fits other photo ratios locally and preserves the previous photo on cancel
   const { album: saved } = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
   const cropped = await (await request.get(`/media/${album.id}/${saved.panels["hero-left"]}`)).body();
   const padded = await (await request.get(`/media/${album.id}/${saved.panels["hero-right"]}`)).body();
-  expect(await sharp(cropped).metadata()).toMatchObject({ width: 112, height: 63 });
-  expect(await sharp(padded).metadata()).toMatchObject({ width: 63, height: 112 });
+  expect(await sharp(cropped).metadata()).toMatchObject({ width: 1792, height: 1008 });
+  expect(await sharp(padded).metadata()).toMatchObject({ width: 1008, height: 1792 });
   const {data, info} = await sharp(padded).ensureAlpha().raw().toBuffer({resolveWithObject:true});
   expect(Array.from(data.subarray(0, 4))).toEqual([0, 0, 0, 255]);
-  expect(data[(56 * info.width + 31) * 4 + 3]).toBe(255);
+  expect(data[(Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * 4 + 3]).toBe(255);
   await request.delete(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } });
 });
 

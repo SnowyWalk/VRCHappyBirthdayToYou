@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import module from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -190,14 +190,10 @@ test("updates an existing album, deduplicates repeated image bytes, and exposes 
 
   const hash = firstSave.panels["hero-left"];
   assert.ok(hash);
-  const mediaPath = path.join(
-    storageDir,
-    "albums",
-    album.id,
-    "media",
-    `${hash}.png`,
+  assert.equal(
+    await storage.storagePathExists(path.join(storageDir, "albums", album.id, "media")),
+    false,
   );
-  assert.deepEqual(new Uint8Array(await readFile(mediaPath)), PNG_BYTES);
 
   const manifest = await readPublicManifest(album.id, "http://localhost:3000");
   assert.deepEqual(manifest, {
@@ -222,7 +218,16 @@ test("updates an existing album, deduplicates repeated image bytes, and exposes 
 
   const media = await getMedia(album.id, hash);
   assert.equal(media.contentType, "image/png");
-  assert.deepEqual(new Uint8Array(media.bytes), PNG_BYTES);
+  const extracted = await sharp(Buffer.from(media.bytes))
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(extracted.info.width * 9, extracted.info.height * 16);
+  assertPixelNear(
+    extracted,
+    Math.floor(extracted.info.width / 2),
+    Math.floor(extracted.info.height / 2),
+    [200, 40, 90],
+  );
 });
 
 test("publishes party atlas versions and persists expiry metadata", async (t) => {
@@ -283,13 +288,9 @@ test("publishes party atlas versions and persists expiry metadata", async (t) =>
     images: [{ panelId: "memory-left-0", bytes: JPEG_BYTES }],
   });
   assert.notEqual(third.atlasId, first.atlasId);
-  assert.deepEqual(
-    new Uint8Array(
-      await readFile(
-        path.join(storageDir, "parties", first.atlasId!, "atlas.png"),
-      ),
-    ),
-    new Uint8Array(firstBytes),
+  assert.equal(
+    await storage.storagePathExists(path.join(storageDir, "parties", first.atlasId!)),
+    false,
   );
 });
 
@@ -650,25 +651,29 @@ test("authenticated deletion removes original photos and all exclusive atlas ver
   await assert.rejects(readAlbumForEdit(album.id, editToken), error => error instanceof StorageError && error.status === 404);
 });
 
-test("deleting shared atlas owners preserves current and old links until the last owner deletes", async (t) => {
+test("shared current atlas is retained until all current owners move or delete", async (t) => {
   const dir = await useTempStorage(t);
   const first = await createAlbum();
   const second = await createAlbum();
-  const old = [];
-  const current = [];
   for (const owner of [first, second]) {
-    old.push(await updateAlbum(owner.album.id, owner.editToken, { nickname: "공유", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] }));
-    current.push(await updateAlbum(owner.album.id, owner.editToken, { nickname: "공유", revision: 1, remove: ["hero-left"], images: [] }));
+    await updateAlbum(owner.album.id, owner.editToken, { nickname: "공유", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] });
   }
-  assert.equal(old[0].atlasId, old[1].atlasId);
-  assert.equal(current[0].atlasId, current[1].atlasId);
+  const firstSaved = await readAlbumForEdit(first.album.id, first.editToken);
+  const secondSaved = await readAlbumForEdit(second.album.id, second.editToken);
+  assert.equal(firstSaved.atlasId, secondSaved.atlasId);
   await storage.deleteAlbum(first.album.id, first.editToken);
-  assert.ok(await storage.getPartyAtlas(old[0].atlasId!));
-  assert.ok(await storage.getPartyAtlas(current[0].atlasId!));
-  assert.deepEqual(await storage.resolveAtlasAlbums(old[0].atlasId!), [second.album.id]);
+  assert.ok(await storage.getPartyAtlas(secondSaved.atlasId!));
+  assert.deepEqual(await storage.resolveAtlasAlbums(secondSaved.atlasId!), [second.album.id]);
+  const moved = await updateAlbum(second.album.id, second.editToken, {
+    nickname: "공유",
+    revision: 1,
+    remove: [],
+    images: [{ panelId: "hero-left", bytes: JPEG_BYTES }],
+  });
+  assert.notEqual(moved.atlasId, secondSaved.atlasId);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", secondSaved.atlasId!)), false);
   await storage.deleteAlbum(second.album.id, second.editToken);
-  assert.equal(await storage.storagePathExists(path.join(dir, "parties", old[0].atlasId!)), false);
-  assert.equal(await storage.storagePathExists(path.join(dir, "parties", current[0].atlasId!)), false);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", moved.atlasId!)), false);
 });
 
 test("draft and expired albums can be deleted with their edit key", async (t) => {
@@ -734,6 +739,27 @@ async function recoverHeaderFromPng(bytes: Uint8Array) {
   return header;
 }
 
+function assertPixelNear(
+  image: { data: Buffer; info: { width: number; channels: number } },
+  x: number,
+  y: number,
+  expected: [number, number, number],
+) {
+  const index = (y * image.info.width + x) * image.info.channels;
+  const actual = [
+    image.data[index],
+    image.data[index + 1],
+    image.data[index + 2],
+  ];
+
+  for (let channel = 0; channel < 3; channel += 1) {
+    assert.ok(
+      Math.abs(actual[channel] - expected[channel]) <= 1,
+      `pixel ${x},${y} channel ${channel}: expected ${expected[channel]}, got ${actual[channel]}`,
+    );
+  }
+}
+
 test("expires access at 24 hours and removes albums and PNGs", async (t) => {
   const dir = await useTempStorage(t);
   const start = Date.now();
@@ -774,11 +800,12 @@ test("save renews current PNG but old PNG and unused original are cleaned up", a
   const first = await updateAlbum(created.album.id, created.editToken, { nickname: "A", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] });
   t.mock.timers.setTime(start + storage.RETENTION_MS / 2);
   const second = await updateAlbum(first.id, created.editToken, { nickname: "B", revision: 1, remove: [], images: [{ panelId: "hero-left", bytes: JPEG_BYTES }] });
-  assert.equal(await storage.storagePathExists(storage.getAlbumMediaPath(first.id, first.panels["hero-left"]!, "png")), false);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", first.atlasId!)), false);
   const orphan = path.join(dir, "albums", first.id, "media", "failed-upload.tmp");
+  await mkdir(path.dirname(orphan), { recursive: true });
   await writeFile(orphan, "orphan");
   t.mock.timers.setTime(start + storage.RETENTION_MS);
-  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 0, atlasesDeleted: 1 });
+  assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 0, atlasesDeleted: 0 });
   assert.equal(await storage.storagePathExists(orphan), false);
   await storage.getPartyAtlas(second.atlasId!);
   const third = await updateAlbum(first.id, created.editToken, { nickname: "C", revision: 2, remove: [], images: [] });
