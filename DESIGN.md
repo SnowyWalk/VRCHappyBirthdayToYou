@@ -81,3 +81,7 @@ Keep the editable album UUID; changed photo content produces an immutable 2048×
 - Photo errors appear with the corresponding wall and a 다시 선택 action without jumping to page top.
 - Final instruction: paste into the URL input and confirm the VRChat text entry dialog; automatic application does not require the kiosk 적용 button.
 - Panel photos have no visible L1–L4/R1–R4 badges. Keep accessible button names for selecting and removing the correct photo.
+
+## Atlas-only storage (2026-10-11)
+- Persist only the current atlas PNG and editing metadata. Restore photo previews and unchanged panels from that atlas without storing derived image files. Reediting uses the resolution already present in the atlas.
+- Delete unused previous atlases after a successful save; preserve files currently referenced by another valid album. Startup/periodic cleanup migrates legacy photo files only after verifying that all current photos can be restored from the atlas.

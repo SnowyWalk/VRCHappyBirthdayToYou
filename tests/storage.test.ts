@@ -850,3 +850,66 @@ test("legacy records use saved timestamp for retention", async (t) => {
   await writeFile(partyFile, JSON.stringify(party));
   assert.deepEqual(await storage.cleanupExpiredStorage(), { albumsDeleted: 1, atlasesDeleted: 1 });
 });
+
+test("partial edits restore unchanged landscape and portrait photos without individual files", async (t) => {
+  const dir = await useTempStorage(t);
+  const { album, editToken } = await createAlbum();
+  const first = await updateAlbum(album.id, editToken, { nickname: "복원", revision: 0, remove: [], images: [
+    { panelId: "hero-left", bytes: PNG_BYTES }, { panelId: "hero-right", bytes: JPEG_BYTES },
+  ] });
+  const second = await updateAlbum(album.id, editToken, { nickname: "복원", revision: 1, remove: [], images: [
+    { panelId: "memory-left-0", bytes: PNG_BYTES },
+  ] });
+  assert.equal(second.panels["hero-left"], first.panels["hero-left"]);
+  assert.equal(second.panels["hero-right"], first.panels["hero-right"]);
+  const left = await getMedia(album.id, second.panels["hero-left"]!);
+  const right = await getMedia(album.id, second.panels["hero-right"]!);
+  const leftSize = await sharp(left.bytes).metadata();
+  const rightSize = await sharp(right.bytes).metadata();
+  assert.equal(leftSize.width! * 9, leftSize.height! * 16);
+  assert.equal(rightSize.width! * 16, rightSize.height! * 9);
+  const leftPixel = await sharp(left.bytes).resize(1, 1).removeAlpha().raw().toBuffer();
+  const rightPixel = await sharp(right.bytes).resize(1, 1).removeAlpha().raw().toBuffer();
+  assert.ok(leftPixel[0] > leftPixel[2]);
+  assert.ok(rightPixel[2] > rightPixel[0]);
+  assert.equal(await storage.storagePathExists(path.join(dir, "albums", album.id, "media")), false);
+  assert.equal(await storage.storagePathExists(path.join(dir, "parties", first.atlasId!)), false);
+});
+
+test("failed multi-photo save preserves the previous committed atlas and creates no source files", async (t) => {
+  const dir = await useTempStorage(t);
+  const { album, editToken } = await createAlbum();
+  const first = await updateAlbum(album.id, editToken, { nickname: "보존", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] });
+  const priorPng = (await storage.getPartyAtlas(first.atlasId!)).bytes;
+  await assert.rejects(() => updateAlbum(album.id, editToken, { nickname: "실패", revision: 1, remove: [], images: [
+    { panelId: "hero-left", bytes: JPEG_BYTES }, { panelId: "hero-right", bytes: SQUARE_PNG_BYTES },
+  ] }), (error: unknown) => error instanceof StorageError && error.status === 400);
+  assert.deepEqual(await readAlbumForEdit(album.id, editToken), first);
+  assert.deepEqual((await storage.getPartyAtlas(first.atlasId!)).bytes, priorPng);
+  assert.equal(await storage.storagePathExists(path.join(dir, "albums", album.id, "media")), false);
+});
+
+test("legacy media is removed only after atlas recovery succeeds and orphan atlases are swept", async (t) => {
+  const dir = await useTempStorage(t);
+  const { album, editToken } = await createAlbum();
+  const first = await updateAlbum(album.id, editToken, { nickname: "이전", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }] });
+  const legacyDir = path.join(dir, "albums", album.id, "media");
+  const legacyFile = path.join(legacyDir, `${first.panels["hero-left"]}.png`);
+  await mkdir(legacyDir, { recursive: true });
+  await writeFile(legacyFile, PNG_BYTES);
+  const atlasFile = path.join(dir, "parties", first.atlasId!, "atlas.png");
+  const validAtlas = await readFile(atlasFile);
+  await writeFile(atlasFile, "broken PNG");
+  t.mock.method(console, "error", () => {});
+  await cleanupExpiredStorage();
+  assert.equal(await storage.storagePathExists(legacyFile), true);
+  await writeFile(atlasFile, validAtlas);
+  const orphanDir = path.join(dir, "parties", "f".repeat(64));
+  await mkdir(orphanDir, { recursive: true });
+  await writeFile(path.join(orphanDir, "atlas.png"), validAtlas);
+  await writeFile(path.join(orphanDir, "metadata.json"), await readFile(path.join(dir, "parties", first.atlasId!, "metadata.json")));
+  assert.deepEqual(await cleanupExpiredStorage(), { albumsDeleted: 0, atlasesDeleted: 1 });
+  assert.equal(await storage.storagePathExists(legacyDir), false);
+  assert.equal(await storage.storagePathExists(orphanDir), false);
+  assert.equal((await getMedia(album.id, first.panels["hero-left"]!)).contentType, "image/png");
+});
