@@ -75,10 +75,11 @@ jobs:
           EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          # Secrets set from Windows may carry CRLF line endings.
+          printf '%s\n' "$EC2_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           if [ -n "$EC2_KNOWN_HOSTS" ]; then
-            printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            printf '%s\n' "$EC2_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
           else
             ssh-keyscan -p "$EC2_PORT" -H "$EC2_HOST" > ~/.ssh/known_hosts
           fi
