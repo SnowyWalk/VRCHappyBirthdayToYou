@@ -19,39 +19,13 @@ git pull --ff-only
 bash scripts/deploy.sh
 ```
 
-## GitHub Actions 자동 배포
+## 배포 방식
 
-`main`에 push하면 CI(`verify`)가 통과한 뒤 `deploy` 작업이 EC2에 SSH로 접속해 정확히 그 커밋으로 `scripts/deploy.sh`를 실행합니다. 볼륨은 유지하고 오래된 이미지만 정리하며, 마지막에 `https://hbd.snowywalk.me/` 응답을 확인합니다. 배포는 한 번에 하나씩 순서대로 실행됩니다. 비밀값이 없으면 배포 단계는 경고만 남기고 건너뜁니다.
+자동 배포는 사용하지 않습니다. EC2 보안 그룹이 SSH를 특정 IP에만 허용하므로 GitHub Actions에서 접속할 수 없습니다. 변경 사항을 `main`에 push하고 CI 통과를 확인한 뒤, 접속 가능한 PC에서 서버에 SSH로 들어가 위 수동 업데이트 명령을 실행합니다. `scripts/deploy.sh`는 지정한 커밋으로 fast-forward한 뒤 이미지를 다시 빌드하고 healthy 상태가 될 때까지 기다리며, 볼륨은 유지하고 오래된 이미지만 정리합니다.
 
-최초 1회 설정:
-
-1. EC2에서 배포 전용 SSH 키를 만들고 공개 키를 등록합니다.
-   ```sh
-   ssh-keygen -t ed25519 -N "" -C github-deploy -f ~/.ssh/github_deploy
-   cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
-   cat ~/.ssh/github_deploy   # 개인 키 → GitHub 비밀값 EC2_SSH_KEY
-   ```
-   개인 키는 GitHub에 등록한 뒤 서버에서 `rm ~/.ssh/github_deploy`로 지워도 됩니다.
-2. EC2 보안 그룹에서 22번 포트가 GitHub Actions 러너에서 접근 가능해야 합니다. 내 IP로만 제한했다면 자동 배포가 접속하지 못합니다.
-3. 서버의 `git pull`이 대화형 인증 없이 동작해야 합니다(공개 저장소이거나 서버에 읽기 권한 키 설정).
-4. GitHub 저장소 → Settings → Secrets and variables → Actions에 등록합니다.
-
-| 비밀값 | 값 |
-| --- | --- |
-| `EC2_HOST` | `54.180.125.84` 또는 SSH용 호스트 이름 |
-| `EC2_USER` | `ubuntu` |
-| `EC2_SSH_KEY` | 위 개인 키 전체 |
-| `EC2_PORT` | 선택, 기본 22 |
-| `EC2_APP_DIR` | 선택, 기본 `/home/ubuntu/VRCHappyBirthdayToYou` |
-| `EC2_KNOWN_HOSTS` | 선택, 권장. 로컬에서 `ssh-keyscan -H 54.180.125.84` 결과. 없으면 매번 keyscan을 신뢰합니다. |
-
-`deploy` 작업은 `production` 환경을 사용하므로 Settings → Environments에서 승인자를 지정하면 배포 전에 수동 승인을 받을 수 있습니다.
-
-배포 검증에서 HTTPS로 사진 8장과 유니코드 이름을 저장하고 2048×2048 PNG를 내려받았습니다. 컨테이너를 재생성한 뒤에도 앨범과 PNG의 SHA-256이 유지됨을 확인했습니다.
-
-DNS 전용 연결 후에는 각 55MiB로 패딩한 정상 PNG 두 장을 합계 110MiB의 HTTPS multipart 요청으로 저장하는 검증도 통과했습니다. 테스트 앨범과 사진은 검증 후 삭제했습니다.
-
-Cloudflare에 `hbd` A 레코드를 `54.180.125.84`, **DNS 전용**으로 설정했습니다. TLS는 NPM의 Let's Encrypt 인증서가 처리합니다. Cloudflare Free/Pro의 요청 전체 업로드 제한(100MB)을 통과하지 않아 여러 장의 대용량 사진을 저장할 수 있습니다. 이 레코드를 프록싱으로 바꾸면 NPM의 512MB 설정과 관계없이 Cloudflare에서 거절될 수 있습니다. [Cloudflare 업로드 제한](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits).
+```sh
+ssh -i <키 파일> ubuntu@ec2-54-180-125-84.ap-northeast-2.compute.amazonaws.com 'cd /home/ubuntu/VRCHappyBirthdayToYou && bash scripts/deploy.sh'
+```
 
 ## 최초 실행
 
