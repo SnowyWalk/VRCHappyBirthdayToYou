@@ -160,23 +160,15 @@ export async function updateAlbum(
     images: ImageInput[];
   },
 ) {
-  return withAlbumWriteLock(STORAGE_LOCK_ID, async () => {
+  // Saves of the same album queue here. Decoding and atlas encoding run outside
+  // the shared storage lock so one heavy save does not stall other albums;
+  // only the file commit below takes the shared lock.
+  return withAlbumWriteLock(id, async () => {
     const stored = await readStoredAlbum(id);
     verifyToken(stored, token);
-
-    if (stored.album.revision !== input.revision) {
-      throw new StorageError(
-        409,
-        "저장된 내용이 이미 변경되었습니다. 다시 불러온 뒤 저장해주세요.",
-      );
-    }
+    assertRevision(stored, input.revision);
 
     const nickname = normalizeNickname(input.nickname);
-    const disk = await statfs(getStorageRoot());
-    const requiredBytes = input.images.reduce((sum, image) => sum + image.bytes.byteLength, 0);
-    if (disk.bavail * disk.bsize < requiredBytes + 512 * 1024 * 1024) {
-      throw new StorageError(503, "서버의 저장 공간이 부족합니다. 잠시 후 다시 저장해 주세요.");
-    }
     const panels = { ...stored.album.panels };
 
     for (const panelId of input.remove) {
@@ -203,44 +195,70 @@ export async function updateAlbum(
       throw new StorageError(400, "revision 값이 BWAT uint32 범위를 초과했습니다.");
     }
     const photosUnchanged = PANELS.every(panel => panels[panel.id] === stored.album.panels[panel.id]);
-    const published = photosUnchanged && stored.album.atlasId
-      ? { atlasId: stored.album.atlasId, panelOrientations: stored.album.panelOrientations ?? getPanelOrientations(panels, media) }
-      : await publishAtlas(
-      id,
-      nextRevision,
-      await collectAtlasPhotos(stored, panels, uploaded),
-    );
-    const now = new Date().toISOString();
-    const nextStored: StoredAlbum = {
-      ...stored,
-      album: {
-        ...stored.album,
-        nickname,
-        panels,
-        panelOrientations:
-          published.panelOrientations || getPanelOrientations(panels, media),
-        revision: nextRevision,
-        updatedAt: now,
-        expiresAt: new Date(Date.parse(now) + RETENTION_MS).toISOString(),
-        atlasId: published.atlasId,
-      },
-      media,
-    };
+    const encoded = photosUnchanged && stored.album.atlasId
+      ? null
+      : await encodePartyAtlas(nextRevision, await collectAtlasPhotos(stored, panels, uploaded).catch((error: NodeJS.ErrnoException) => {
+        // The committed atlas was removed while restoring photos (expiry or deletion).
+        if (error.code === "ENOENT") throw new StorageError(409, "저장된 내용이 이미 변경되었습니다. 다시 불러온 뒤 저장해주세요.");
+        throw error;
+      }));
 
-    await renewPartyExpiry(published.atlasId, nextStored.album.expiresAt!, id);
-    await writeStoredAlbum(id, nextStored);
-    try {
-      await pruneUnusedMedia(id, nextStored);
-      if (stored.album.atlasId && stored.album.atlasId !== published.atlasId) {
-        await removeUnreferencedAtlas(stored.album.atlasId);
+    return withAlbumWriteLock(STORAGE_LOCK_ID, async () => {
+      // Deletion and cleanup only take the shared lock, so re-check the album.
+      const current = await readStoredAlbum(id);
+      verifyToken(current, token);
+      assertRevision(current, input.revision);
+
+      const disk = await statfs(getStorageRoot());
+      const requiredBytes = encoded?.png.byteLength ?? 0;
+      if (disk.bavail * disk.bsize < requiredBytes + 512 * 1024 * 1024) {
+        throw new StorageError(503, "서버의 저장 공간이 부족합니다. 잠시 후 다시 저장해 주세요.");
       }
-    } catch (error) {
-      // The save is already committed. The periodic sweep retries cleanup;
-      // reporting a failed save here would cause an invalid revision retry.
-      console.error("Post-save storage cleanup failed:", id, error);
-    }
-    return nextStored.album;
+
+      const published = encoded
+        ? await writePartyAtlas(id, nextRevision, encoded)
+        : { atlasId: stored.album.atlasId!, panelOrientations: stored.album.panelOrientations ?? getPanelOrientations(panels, media) };
+      const now = new Date().toISOString();
+      const nextStored: StoredAlbum = {
+        ...current,
+        album: {
+          ...current.album,
+          nickname,
+          panels,
+          panelOrientations:
+            published.panelOrientations || getPanelOrientations(panels, media),
+          revision: nextRevision,
+          updatedAt: now,
+          expiresAt: new Date(Date.parse(now) + RETENTION_MS).toISOString(),
+          atlasId: published.atlasId,
+        },
+        media,
+      };
+
+      await renewPartyExpiry(published.atlasId, nextStored.album.expiresAt!, id);
+      await writeStoredAlbum(id, nextStored);
+      try {
+        await pruneUnusedMedia(id, nextStored);
+        if (current.album.atlasId && current.album.atlasId !== published.atlasId) {
+          await removeUnreferencedAtlas(current.album.atlasId);
+        }
+      } catch (error) {
+        // The save is already committed. The periodic sweep retries cleanup;
+        // reporting a failed save here would cause an invalid revision retry.
+        console.error("Post-save storage cleanup failed:", id, error);
+      }
+      return nextStored.album;
+    });
   });
+}
+
+function assertRevision(stored: StoredAlbum, revision: number) {
+  if (stored.album.revision !== revision) {
+    throw new StorageError(
+      409,
+      "저장된 내용이 이미 변경되었습니다. 다시 불러온 뒤 저장해주세요.",
+    );
+  }
 }
 
 export async function readPublicManifest(id: string, origin: string) {
@@ -584,14 +602,23 @@ function getPanelOrientationsFromRecords(records: AtlasPanelRecord[]) {
   ) as Partial<Record<PanelId, "landscape" | "portrait">>;
 }
 
-async function publishAtlas(
-  albumId: string,
+type EncodedAtlas = Awaited<ReturnType<typeof encodeAtlas>>;
+
+function encodePartyAtlas(
   revision: number,
   photos: { panelId: number; bytes: Uint8Array }[],
-): Promise<PublishedAtlas> {
+): Promise<EncodedAtlas> {
   // The VRChat world reads the display name from the copied URL's ?name=
   // parameter. Keep the immutable PNG independent from nickname text.
-  const atlas = await encodeAtlas({ nickname: "", revision, photos });
+  return encodeAtlas({ nickname: "", revision, photos });
+}
+
+/** Must run under the shared storage lock so cleanup never sees a half-published atlas. */
+async function writePartyAtlas(
+  albumId: string,
+  revision: number,
+  atlas: EncodedAtlas,
+): Promise<PublishedAtlas> {
   const atlasId = sha256Bytes(atlas.png);
   const partyDir = getPartyDir(atlasId);
   await mkdir(partyDir, { recursive: true });

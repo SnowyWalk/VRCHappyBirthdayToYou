@@ -11,13 +11,41 @@
 - NPM에서 Let's Encrypt 인증서, HTTP → HTTPS 강제 이동, HTTP/2를 설정했습니다.
 - 사진과 앨범은 `vrchappybirthdaytoyou_birthday-data` 볼륨에 저장됩니다. 링크와 업로드 사진은 마지막 저장 후 24시간 동안 유지되고 앱 시작 시와 1분 주기 정리 작업으로 만료 데이터를 삭제합니다. 기존 로컬 데이터는 자동 이관하지 않았습니다.
 
-이 서버의 업데이트 명령:
+이 서버의 수동 업데이트 명령 (`.env`에 `NPM_NETWORK`가 있으면 `compose.npm.yaml`을 자동으로 포함):
 
 ```sh
 cd /home/ubuntu/VRCHappyBirthdayToYou
 git pull --ff-only
-docker compose -f compose.yaml -f compose.npm.yaml up -d --build --wait
+bash scripts/deploy.sh
 ```
+
+## GitHub Actions 자동 배포
+
+`main`에 push하면 CI(`verify`)가 통과한 뒤 `deploy` 작업이 EC2에 SSH로 접속해 정확히 그 커밋으로 `scripts/deploy.sh`를 실행합니다. 볼륨은 유지하고 오래된 이미지만 정리하며, 마지막에 `https://hbd.snowywalk.me/` 응답을 확인합니다. 배포는 한 번에 하나씩 순서대로 실행됩니다. 비밀값이 없으면 배포 단계는 경고만 남기고 건너뜁니다.
+
+최초 1회 설정:
+
+1. EC2에서 배포 전용 SSH 키를 만들고 공개 키를 등록합니다.
+   ```sh
+   ssh-keygen -t ed25519 -N "" -C github-deploy -f ~/.ssh/github_deploy
+   cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
+   cat ~/.ssh/github_deploy   # 개인 키 → GitHub 비밀값 EC2_SSH_KEY
+   ```
+   개인 키는 GitHub에 등록한 뒤 서버에서 `rm ~/.ssh/github_deploy`로 지워도 됩니다.
+2. EC2 보안 그룹에서 22번 포트가 GitHub Actions 러너에서 접근 가능해야 합니다. 내 IP로만 제한했다면 자동 배포가 접속하지 못합니다.
+3. 서버의 `git pull`이 대화형 인증 없이 동작해야 합니다(공개 저장소이거나 서버에 읽기 권한 키 설정).
+4. GitHub 저장소 → Settings → Secrets and variables → Actions에 등록합니다.
+
+| 비밀값 | 값 |
+| --- | --- |
+| `EC2_HOST` | `54.180.125.84` 또는 SSH용 호스트 이름 |
+| `EC2_USER` | `ubuntu` |
+| `EC2_SSH_KEY` | 위 개인 키 전체 |
+| `EC2_PORT` | 선택, 기본 22 |
+| `EC2_APP_DIR` | 선택, 기본 `/home/ubuntu/VRCHappyBirthdayToYou` |
+| `EC2_KNOWN_HOSTS` | 선택, 권장. 로컬에서 `ssh-keyscan -H 54.180.125.84` 결과. 없으면 매번 keyscan을 신뢰합니다. |
+
+`deploy` 작업은 `production` 환경을 사용하므로 Settings → Environments에서 승인자를 지정하면 배포 전에 수동 승인을 받을 수 있습니다.
 
 배포 검증에서 HTTPS로 사진 8장과 유니코드 이름을 저장하고 2048×2048 PNG를 내려받았습니다. 컨테이너를 재생성한 뒤에도 앨범과 PNG의 SHA-256이 유지됨을 확인했습니다.
 

@@ -417,6 +417,26 @@ test("serializes concurrent saves so only one same-revision update succeeds", as
   );
 });
 
+test("saves of different albums run alongside cleanup without losing published atlases", async (t) => {
+  await useTempStorage(t);
+  const first = await createAlbum();
+  const second = await createAlbum();
+
+  const [savedFirst, savedSecond] = await Promise.all([
+    updateAlbum(first.album.id, first.editToken, {
+      nickname: "First", revision: 0, remove: [], images: [{ panelId: "hero-left", bytes: PNG_BYTES }],
+    }),
+    updateAlbum(second.album.id, second.editToken, {
+      nickname: "Second", revision: 0, remove: [], images: [{ panelId: "hero-right", bytes: JPEG_BYTES }],
+    }),
+    cleanupExpiredStorage(),
+  ]);
+
+  await cleanupExpiredStorage();
+  assert.equal((await storage.getPartyAtlas(savedFirst.atlasId!)).contentType, "image/png");
+  assert.equal((await storage.getPartyAtlas(savedSecond.atlasId!)).contentType, "image/png");
+});
+
 test("rejects unprocessed 4K originals above the resized photo limit", async (t) => {
   await useTempStorage(t);
   const { album, editToken } = await createAlbum();
