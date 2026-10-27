@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Birthday World · 사진 설정",
-  description: "월드 패널의 사진과 생일자 이름을 설정합니다.",
+  title: "생일 사진 설정 · Birthday World",
+  description: "생일 월드에 띄울 이름과 사진을 정하고 링크를 만듭니다.",
 };
 export default function RootLayout({
   children,

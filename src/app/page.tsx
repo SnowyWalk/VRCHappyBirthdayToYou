@@ -1,4 +1,4 @@
-import { Entry } from "@/components/entry";
+import { Studio } from "@/components/studio";
 export default function Home() {
-  return <Entry />;
+  return <Studio />;
 }

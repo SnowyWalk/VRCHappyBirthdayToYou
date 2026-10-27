@@ -1,87 +1,43 @@
 # Design
 
 ## Source of truth
-- Status: Active; last refreshed: 2026-10-10.
-- Surfaces: entry and album editor. Evidence: user brief, existing entry/editor/CSS and browser tests, latest Birthday World gallery arrangement, previous captures. New capture is taken only while the world chat is idle.
-## Brand
-- Birthday World controller for visitors already familiar with the VRChat world.
-- Keep world image and action controls; remove promotional copy, feature cards, footers and studio labels.
-## Product goals
-- Create once, repeatedly save the same UUID, load existing work, choose eight photos and birthday nickname, publish BWAT v1 atlas PNG and copy its immutable direct URL.
-- Success: saved content survives server restart; unchanged photos are not uploaded again.
-- Non-goals: modifying Unity project, authentication, production hosting.
-## Personas and jobs
-- Visitors arrive from the world's instructions; they need to set panel photos, enter a name and copy a link, primarily on desktop.
+- Status: Active; last refreshed: 2026-10-28 (single-screen redesign).
+- Surfaces: `src/components/studio.tsx` (whole flow), `world-scene.tsx` (walls), `name-sign.tsx`, `link-dialog.tsx`, `load-dialog.tsx`, `src/app/globals.css`. Browser checks: `tests/e2e/*.spec.ts`.
+
+## Who arrives and why
+- Visitors come from the Birthday World, where the settings board tells them to open this site. They already know the goal: set a name and photos, then paste a link back into the world.
+- The site is a tool, not a landing page. No marketing copy, no gate in front of the editor, no learning curve.
+
 ## Information architecture
-- `/`: actual world preview, dominant 새로 만들기, secondary 불러오기. `/edit/{uuid}`: ordered steps 이름 입력 → 사진 등록 → 링크 복사; show only the current task. Keep the interactive world capture full width in the photo step.
-- `/party/{hash}/atlas.png`: immutable BWAT image; `/data/{uuid}` remains debugging JSON; `/media/{uuid}/{hash}`: originals.
-## Design principles
-- Preserve world positions: eight photo targets overlay their measured texture corners in the world render. Selecting a target immediately opens its file picker. Never rearrange the panels into cards, columns or an arbitrary grid.
-- Clearly distinguish unsaved preview from saved world data.
-- Home uses one fresh overview of the circular terrace. Editor uses two real captures of four panels each, with the guestbook and complete HAPPY BIRTHDAY heading visible in both. These are essential spatial landmarks; never hide them or crop away the heading. Keep panel positions, sizes and rotations unchanged; exclude the world UI layer from the temporary capture camera and hide the obstructing Photo booth, restore in finally, and never save the scene. Measured texture corners connect click targets to Unity objects and existing atlas IDs. Do not rearrange panels into a grid.
+- `/` is the editor itself, as a fresh draft. Nothing is created on the server until the first "링크 만들기"; then the album is created, saved, and the address switches in place to `/edit/{uuid}#key=…` (no remount, drafts survive).
+- `/edit/{uuid}#key=…` opens a saved album in the same editor.
+- One screen, three numbered parts, top to bottom: ① 생일자 이름 ② 사진 ③ 링크 (fixed bottom bar). No step navigation and no hidden stages.
+- `/party/{hash}/atlas.png` is the immutable BWAT image; `/data/{uuid}` is debugging JSON; `/media/{uuid}/{hash}` serves photos restored from the atlas.
+
+## Flow
+1. Name: one large input. Next to it, the world's stage board renders the typed name live where "YOUR NAME" sits in the world. An empty name leaves the board blank, as in the world. Validation (control characters, 128 UTF-8 bytes) runs on save and focuses the field.
+2. Photos: the two real wall captures with the eight frames at their measured positions. Clicking a frame opens the file picker; dropping one photo fills that frame; other ratios open 사진 맞추기 (crop/contain, direction, position). "여러 장 한 번에 넣기" (or dropping several photos) fills empty frames in panel order (hero-left, hero-right, then gallery) and center-crops other ratios, then reports how many went in.
+3. Link: the bottom bar is always visible. It shows a one-line status and one primary action:
+   - not saved / changed → "링크 만들기" / "새 링크 만들기";
+   - saved and unchanged → "링크 복사" (→ "복사됨").
+   Saving copies the link immediately and opens the link dialog: the world's "아틀라스 이미지 URL" row with a "여기에 붙여넣기 (Ctrl+V)" callout, the link with a copy button, and two notes (24-hour validity, edits need a new link). "링크 보기" reopens it. If the browser blocks copying, the field is focused and selected with a Ctrl+C hint.
+- Any edit after saving marks the link stale ("바뀐 내용이 있어요") and the primary action becomes "새 링크 만들기", so an outdated link cannot be copied by mistake.
+- On `/`, links made in this browser appear above the editor ("이 브라우저에서 만든 링크") with name, photo count and age; one click resumes, a trash button deletes. Header: "불러오기" (paste a world PNG link or edit link) on a fresh draft, "새로 만들기" once an album exists. Saved albums can be deleted at the page bottom ("사진과 링크 삭제").
+
+## Walls
+- Never rearrange the frames into a grid: the photo must be placed where it hangs in the world. Frames follow the projected Unity texture corners (`src/lib/world-view.json`, `panelTransform`).
+- Wide containers (≥720px) show each full wall capture with the HAPPY BIRTHDAY landmark; filled frames get a "빼기" button below.
+- Narrow containers zoom into the frames' region and number them 1–8 (left wall 1–4, right wall 5–8, left to right on screen), with a row of large numbered slot buttons below each wall. Slots are the accessible controls there; the zoomed frames stay clickable but are hidden from assistive tech.
+
 ## Visual language
-- Neutral light and dark surfaces; high-contrast blue action buttons. The world image conveys the world atmosphere; interface copy stays functional.
-- Home shows the world image, dominant 새로 만들기 and secondary 불러오기. No visible heading, emotional copy, tagline or marketing text. Primary CTA >=64px high and >=260px wide. Editor shows a name field and the full-width world image; photos overlay the exact projected texture corners instead of separate cards.
-- Restrained transitions, respect reduced motion.
-## Components
-- Reuse shadcn Button, Input, Dialog, theme toggle. WorldScene contains native projected photo buttons over the actual capture. L1–L4 and R1–R4 follow the physical order from stage to entrance; preserve populated/empty/busy states. A panel click immediately opens its file picker, so there is no persistent selection, selected-panel toolbar, or separate replacement control. The birthday name input spans the gallery width. Only the world image URL and its copy control are shown; remove the edit-link disclosure.
-## Accessibility
-- WCAG AA aim; visible focus; native buttons, labels, dialog focus management; status live region.
-- Every scene panel available in a labeled list; no hover-only controls.
-## Responsive behavior
-- Desktop shows the two wall views sequentially at full width. Mobile keeps both images at least 1300px wide in internally scrolling viewports, starting at the birthday heading; each has 무대 쪽/입구 쪽 controls matching the real camera direction. Creation stays in the first viewport; save stays fixed with safe-area clearance. Touch targets >=44px; the page itself has no horizontal overflow at 360px.
-## Interaction states
-- Loading disables duplicate operations; empty panels show plus; errors preserve edits; saved state shows timestamp.
-- Save conflicts ask for reload through an explicit error; network failures allow retry.
-## Content voice
-- Only necessary Korean control, action and result text. Name: 생일자의 이름 (optional; Enter advances). Gallery: 사진을 넣을 패널을 누르세요. Help below the scene: 가로 16:9 또는 세로 9:16 · 저장 후 24시간 보관. Save: 저장하고 링크 만들기 / 변경 사항 저장. Copy: 월드에 붙여 넣을 링크 / 링크 복사. No emotional headings, taglines, marketing description or infrastructure terms.
-## Implementation constraints
-- Next.js App Router, TypeScript, shadcn/ui, Tailwind CSS v4. Persistent Node server filesystem.
-- Verify lint, types, build, API deduplication and browser create/save/load flows.
-## Open questions
-- Diagram panel IDs must remain identical to PANELS atlasId/objectName mapping. New previews refresh home imagery without breaking editor hit targets.
-- Unity Udon URL download and manifest reader remain a separate integration task.
-- Production authentication and domain deployment policy.
+- Neutral surfaces in light and dark themes (system default, header toggle remembered). Blue primary action, green when copied. World images keep their own night palette in both themes.
+- Steps are marked by small numbered circles, not by navigation. Copy is short, practical Korean.
 
-## 테마
+## Performance
+- Served images are lossy WebP made by `artifacts/publish-images.mjs` from `artifacts/source/`: walls 2400×600 (~100KB each), stage board ~30KB, URL row ~4KB. Filenames carry a content hash. Do not ship multi-megabyte captures.
 
-라이트·다크 테마를 제공한다. 최초 접속은 기기 설정을 따르고, 헤더의 아이콘 버튼으로 전환한 선택은 브라우저에 저장한다. 월드 이미지와 패널 강조는 그대로 유지하며 입력칸, 팝업, 오류 안내와 모바일 저장 바에도 테마를 적용한다.
+## Accessibility and responsive behavior
+- Native buttons and labels, visible focus, `role="status"` for the bar and bulk-add result, alerts for errors. Touch targets ≥44px. No horizontal page scroll at 360px; the action bar respects the safe area. Respect reduced motion.
 
-## BWAT v1 publishing
-
-Keep the editable album UUID; changed photo content produces an immutable 2048×2048 PNG URL, while name-only saves reuse the PNG and update its name query parameter. All eight panel positions support landscape 16:9 and portrait 9:16. Show only actionable format limits and errors. The public copy button is named VRChat용 이미지 링크 복사. Preserve prior files and distinguish unsaved previews from the previous published link. Nicknames use NFC UTF-8 at most 128 bytes. See docs/BIRTHDAY_ATLAS_PROTOCOL_V1.md.
-
-## Guided editing flow (2026-10-10)
-- Evidence: user requested three visible ordered tasks and progressive disclosure after a friend struggled; implementation surfaces src/components/album-editor.tsx, src/components/world-scene.tsx, src/app/globals.css; browser checks tests/e2e/album.spec.ts.
-- Header navigation: numbered 이름 입력 / 사진 등록 / 링크 복사. Active step uses contrast and aria-current=step. Future unavailable steps are disabled; prior steps remain accessible without losing edits.
-- New album starts with the full-width name input. Empty name is permitted, with explicit optional wording. Validate names before advancing, preserving invalid input and showing an actionable error. Enter performs the same next action as the primary button.
-- A saved album starts at photo registration, with a compact editable name summary. The world image, mapped panels and HAPPY BIRTHDAY landmarks remain unchanged. Keep format details secondary to the direct panel instruction. Do not restore a photo-count heading.
-- Saving transitions to the copy step. Hide the gallery and save bar; show one dominant copy button, a read-only URL, expiry and the single instruction to paste into the world input. Copy success remains visible. Users can return to edit.
-- A draft modification disables the link step until saved, preventing copying an outdated atlas. Link uses the saved nickname. Returning to a prior step preserves prepared photos and removals. Save errors stay on the photo step and preserve the draft.
-- Focus: name input on step 1; focusable heading on steps 2/3, with scroll to that task. Keyboard tab order excludes hidden steps. Respect reduced-motion; no animated auto-advance while typing.
-- Responsive: full-width three-item navigation at 360px; >=44px targets. Only the photo step has the fixed mobile save bar; safe-area padding prevents overlap. Name and copy actions remain in normal flow. Copy button >=56px high. Light/dark reuse existing tokens.
-- Mobile spatial discovery: retain the initial HAPPY BIRTHDAY landmark and add an explicit 패널 보기 button on each wall. It scrolls to that wall's stage-side photo target; directional controls and swipe reveal the remaining panels. Validate that the target is inside the viewport, and keep the image transforms unchanged.
-- Success checks: optional name, validation, photo selection/drop, backward draft retention, save failure/retry, saved-album reentry, disabled stale copy, keyboard focus, mobile overflow, copy fallback, expiry and deletion.
-
-## Link guidance update (2026-10-10)
-- Name step action is 다음; photo constraints and retention are always visible, never in a disclosure.
-- Link step uses a 24-hour duration instead of an exact expiry date: 링크는 저장 후 24시간 동안만 유효합니다. 이후에는 링크가 만료되고 사진도 삭제됩니다.
-- Show the real captured 생일 사진 설정 board beside the link, visually highlighting the 아틀라스 이미지 URL row and 적용 button. Screenshot source: Birthday world/Captures/AtlasUrlLock_Kiosk.png; Unity scene is not modified. Crop for display with CSS to remove unrelated credits and setup-status text.
-- Add a contrasting 링크 붙여넣기 callout and arrow pointing to the URL input; keep the input and 적용 button unobstructed at desktop and mobile sizes.
-
-## Image clarity and concise controls (2026-10-10)
-- Render the same camera framing at 4800×2700; publish lossless WebP crops (walls 4800×1200, overview 3480×1920). Keep logical coordinates unchanged; serve these static assets without Next image recompression.
-- Deletion action is 사진과 링크 삭제 in both the editor and recent links.
-- Remove the repeated ratio sentence above the scene and the help heading, file extensions, pixel limit and resizing explanation. Preserve concise ratio/24-hour guidance below the scene and actionable validation errors.
-
-## Desktop UX revision (2026-10-10)
-- PC use takes priority. Overlay Create/Load near the bottom of the main preview, where they do not cover the stage landmark. A dark gradient keeps controls readable in either theme. Keep recent names/count/time and a trash control; omit visible UUIDs. Deletion action is 삭제; confirmation explains permanent removal. Load label is 월드에 사용한 링크.
-- Omit the wall overview thumbnail and left/right title strip; desktop wall photos continue directly into one another. Keep compact navigation only at narrow widths. Preserve actual panel geometry. Exclude UI layer22 from wall captures so world UI text does not float over the scene.
-- Nonmatching photos open 사진 맞추기 with crop/contain, landscape/portrait and crop positioning. Preview and encoding use the same framing; originals stay local. Cancellation preserves earlier photo. Existing file/pixel safety and bounded2048 output remain.
-- Photo errors appear with the corresponding wall and a 다시 선택 action without jumping to page top.
-- Final instruction: paste into the URL input and confirm the VRChat text entry dialog; automatic application does not require the kiosk 적용 button.
-- Panel photos have no visible L1–L4/R1–R4 badges. Keep accessible button names for selecting and removing the correct photo.
-
-## Atlas-only storage (2026-10-11)
-- Persist only the current atlas PNG and editing metadata. Restore photo previews and unchanged panels from that atlas without storing derived image files. Reediting uses the resolution already present in the atlas.
-- Delete unused previous atlases after a successful save; preserve files currently referenced by another valid album. Startup/periodic cleanup migrates legacy photo files only after verifying that all current photos can be restored from the atlas.
+## Constraints kept from the protocol
+- BWAT v1 (`docs/BIRTHDAY_ATLAS_PROTOCOL_V1.md`): eight fixed panel IDs, landscape 16:9 or portrait 9:16 on every panel, name only in the `name` query, NFC UTF-8 ≤128 bytes. Name-only saves reuse the PNG; photo changes publish a new immutable PNG.

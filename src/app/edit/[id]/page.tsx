@@ -1,9 +1,9 @@
-import { AlbumEditor } from "@/components/album-editor";
+import { Studio } from "@/components/studio";
 export default async function EditPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <AlbumEditor id={id} />;
+  return <Studio albumId={id} />;
 }

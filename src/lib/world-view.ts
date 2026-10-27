@@ -2,7 +2,6 @@ import capture from './world-view.json';
 import { type PanelId } from './panels';
 
 export const WORLD_VIEWS = capture.views;
-export const WORLD_OVERVIEW = capture.overview;
 export function panelLocation(id: PanelId) {
   const side = id.includes('left') ? 'L' : 'R';
   const index = id.startsWith('hero') ? 1 : Number(id.slice(-1)) + 2;
