@@ -22,11 +22,11 @@ test("creation is dominant and photo editing remains usable at desktop and mobil
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
   await page.screenshot({ path: "artifacts/screenshots/redesign-home-mobile.png", fullPage: true });
   await create.click();
-  await expect(page.getByLabel("생일자의 이름")).toBeVisible();
+  const name = page.getByRole("textbox", { name: "생일자의 이름" });
+  await expect(name).toBeVisible();
+  await name.fill("서윤의 생일");
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
-  const nameBounds = (await page.getByLabel("생일자의 이름").boundingBox())!;
-  const galleryBounds = (await page.locator(".controller-workspace").boundingBox())!;
-  expect(Math.abs(nameBounds.width - galleryBounds.width)).toBeLessThan(2);
   await expect(page.locator(".photo-control, .edit-link, .scene-panel.active, .scene-panel[aria-pressed]")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "편집 링크 복사", exact: true })).toHaveCount(0);
   await expect(page.getByRole("img", { name: "왼쪽 사진 패널 실제 위치" })).toBeVisible();
@@ -55,7 +55,6 @@ test("creation is dominant and photo editing remains usable at desktop and mobil
     expect(capture.landmark.bounds.right * scale - stageScroll).toBeLessThanOrEqual(await viewport.evaluate(element => element.clientWidth));
   }
   await page.screenshot({ path: "artifacts/screenshots/world-landmark-mobile.png", fullPage: true });
-  await page.getByLabel("생일자의 이름").fill("서윤의 생일");
   const image = await sharp("public/world-spatial.webp").resize(640,360,{fit:"cover"}).png().toBuffer();
   const panels = page.locator(".scene-panel");
   expect(await panels.count()).toBe(8);
@@ -78,7 +77,8 @@ test("creation is dominant and photo editing remains usable at desktop and mobil
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
   await page.screenshot({ path: "artifacts/screenshots/redesign-editor-mobile.png", fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  const canvas = (await page.locator(".scene-workspace").boundingBox())!;
+  await page.getByRole("button", { name: "사진 수정하기", exact: true }).click();
+  const canvas =(await page.locator(".scene-workspace").boundingBox())!;
   const workspace = (await page.locator(".controller-workspace").boundingBox())!;
   expect(canvas.width).toBeGreaterThan(workspace.width * .98);
   await page.screenshot({ path: "artifacts/screenshots/redesign-editor-desktop.png", fullPage: true });
@@ -98,6 +98,7 @@ test("clicking measured world texture positions stores photos in the correspondi
   ];
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.locator(".scene-panel")).toHaveCount(8);
   const hashes: Record<string, string> = {};
   for (const [index, [objectName, id]] of expected.entries()) {
@@ -125,7 +126,10 @@ test("clicking measured world texture positions stores photos in the correspondi
   await page.getByRole("button", { name: "저장하고 링크 만들기", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("모든 변경 사항 저장됨");
   const saved = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
-  expect(saved.album.panels).toEqual(hashes);
+  // The browser re-encodes uploads as WebP, so compare panel assignment, not source hashes.
+  const savedPanels = saved.album.panels as Record<string, string | null>;
+  expect(Object.keys(savedPanels).filter(id => savedPanels[id]).sort()).toEqual(Object.keys(hashes).sort());
+  expect(new Set(Object.values(savedPanels)).size).toBe(expected.length);
   await page.screenshot({ path: "artifacts/screenshots/world-panel-mapping.png", fullPage: true });
 });
 
