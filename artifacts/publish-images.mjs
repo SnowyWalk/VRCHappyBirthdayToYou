@@ -29,10 +29,21 @@ const stageSign = await publish('stage-sign', await sharp('artifacts/source/over
   .composite([{ input: patch, left: 328, top: 253 }])
   .webp({ quality: 84 }).toBuffer());
 
-// The world's "아틀라스 이미지 URL" row from the in-world settings board
-// (source: Birthday world/Captures/AtlasUrlLock_Kiosk.png).
-const urlField = await publish('url-field', await sharp('artifacts/source/world-input-panel.webp')
-  .extract({ left: 120, top: 640, width: 840, height: 136 })
-  .webp({ quality: 88 }).toBuffer());
+// The whole in-world settings board, so visitors recognise it in VRChat
+// (source: Birthday world/Captures/AtlasUrlLock_Kiosk.png). The capture was
+// taken before the website address was set, so paint the fields as the live
+// world shows them: the site address and the "paste the URL" status line.
+const live = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1280">
+  <rect x="138" y="776" width="560" height="40" fill="rgb(44,42,54)"/>
+  <text x="160" y="590" font-family="Noto Sans KR, Malgun Gothic" font-size="22" fill="rgb(222,219,230)">https://hbd.snowywalk.me/</text>
+  <text x="143" y="803" font-family="Noto Sans KR, Malgun Gothic" font-size="21" fill="rgb(255,212,145)">아틀라스 이미지 URL을 붙여넣으세요.</text>
+</svg>`;
+const painted = await sharp('artifacts/source/world-input-panel.webp')
+  .composite([{ input: Buffer.from(live) }]).png().toBuffer();
+// A little night sky stays around the board; the page places its highlights
+// in percentages of this 992×1096 crop.
+const settingsBoard = await publish('settings-board', await sharp(painted)
+  .extract({ left: 44, top: 92, width: 992, height: 1096 })
+  .resize(800).webp({ quality: 82 }).toBuffer());
 
-await fs.writeFile('src/lib/assets.json', JSON.stringify({ stageSign, urlField }, null, 2) + '\n');
+await fs.writeFile('src/lib/assets.json', JSON.stringify({ stageSign, settingsBoard }, null, 2) + '\n');

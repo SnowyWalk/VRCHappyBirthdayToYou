@@ -8,7 +8,10 @@ import {
   editIdFrom,
   expectNoHorizontalOverflow,
   landscapeImage,
-  linkDialog,
+  makeImage,
+  actionBar,
+  linkCard,
+  linkField,
   makeLink,
   makeLinkButton,
   nameField,
@@ -47,16 +50,18 @@ test("one screen: name, photos and link without creating an album before saving"
   expect(page.url()).toMatch(new RegExp(`/edit/${id}#key=[\\w-]{43}$`));
   expect(new URL(firstLink).searchParams.get("name")).toBe("테스트 생일");
   expect((await request.get(firstLink)).status()).toBe(200);
-  await expect(copyButton(page)).toHaveText(/링크 복사|복사됨/);
-
-  // The guide shows where the link goes in the world.
-  await page.getByRole("button", { name: "링크와 붙여넣는 방법 보기" }).click();
-  const dialog = linkDialog(page);
-  await expect(dialog.getByText("여기에 붙여넣기 (Ctrl+V)")).toBeVisible();
-  await expect(dialog).toContainText("24시간");
-  await expect.poll(() => dialog.locator(".url-field-guide img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
-  await page.screenshot({ path: "artifacts/screenshots/link-dialog-desktop.png" });
-  await page.keyboard.press("Escape");
+  // Making the link copies nothing: the copy button starts unpressed and the
+  // link part, with the world board guide, is scrolled into view instead.
+  await expect(copyButton(page)).toHaveText("링크 복사");
+  await expect(copyButton(page)).toBeFocused();
+  await expect(copyButton(page)).toBeInViewport();
+  await expect(actionBar(page)).toBeHidden();
+  const guide = linkCard(page).getByRole("img", { name: /생일 사진 설정 판/ });
+  await expect(guide).toBeVisible();
+  await expect.poll(() => guide.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+  await expect(linkCard(page)).toContainText("① 여기에 붙여넣기");
+  await expect(linkCard(page)).toContainText("24시간");
+  await page.screenshot({ path: "artifacts/screenshots/link-desktop.png" });
 
   // Editing marks the link stale until a new one is made.
   await nameField(page).fill("테스트 생일 수정");
@@ -75,8 +80,10 @@ test("one screen: name, photos and link without creating an album before saving"
     expect(bounds.width).toBeGreaterThanOrEqual(44);
     expect(bounds.height).toBeGreaterThanOrEqual(44);
   }
-  const bar = (await page.locator(".action-bar").boundingBox())!;
-  expect(bar.y + bar.height).toBeLessThanOrEqual(844);
+  // Away from part 3 the bar offers the same action, inside the screen.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(actionBar(page)).toBeVisible();
+  await expect.poll(async () => { const bar = (await actionBar(page).boundingBox())!; return bar.y + bar.height; }).toBeLessThanOrEqual(844);
   await page.screenshot({ path: "artifacts/screenshots/studio-mobile.png", fullPage: true });
   await page.getByRole("button", { name: "테마 전환", exact: true }).click();
   await expectNoHorizontalOverflow(page);
@@ -185,8 +192,13 @@ test("create, save repeatedly, copy and load from another page", async ({ page, 
   const firstAtlasUrl = await makeLink(page);
   const editLink = page.url();
   const id = editIdFrom(page);
-  // Saving copies the link right away.
+  // Making the link does not copy it; the copy button does.
+  expect(await page.evaluate(() => navigator.clipboard.readText())).not.toBe(firstAtlasUrl);
+  await copyButton(page).click();
+  await expect(copyButton(page)).toHaveText("복사됨");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(firstAtlasUrl);
+  // The pressed state is brief so it never lingers as a stale "copied".
+  await expect(copyButton(page)).toHaveText("링크 복사", { timeout: 5000 });
   let manifest = await (await request.get(`/data/${id}`)).json();
   expect([manifest.nickname, manifest.revision, manifest.panels.length]).toEqual(["멜비의 생일", 1, 1]);
   expect(firstAtlasUrl).toMatch(/^https?:\/\/[^/]+\/party\/[a-f0-9]{64}\/atlas\.png\?name=%EB%A9%9C%EB%B9%84%EC%9D%98%20%EC%83%9D%EC%9D%BC$/);
@@ -214,7 +226,7 @@ test("create, save repeatedly, copy and load from another page", async ({ page, 
   await page.getByRole("dialog").getByRole("button", { name: "불러오기" }).click();
   await expect(nameField(page)).toHaveValue("멜비의 생일");
   expect(page.url()).toContain(id);
-  await expect(copyButton(page)).toHaveText(/링크 복사|복사됨/);
+  await expect(copyButton(page)).toHaveText("링크 복사");
   // Hero-left is the fourth frame from the left on the left wall.
   await page.getByRole("button", { name: "사진 4 빼기" }).click();
   await makeLink(page);
@@ -272,40 +284,22 @@ test("invalid load, missing token and malformed uploads are handled", async ({ p
   await expect(page.getByRole("heading", { name: "이 링크를 열 수 없어요" })).toBeVisible();
 });
 
-test("fits other photo ratios locally and preserves the previous photo on cancel", async ({ page, request }) => {
+test("center-crops other photo ratios without asking", async ({ page, request }) => {
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
-  const dialog = page.getByRole("dialog", { name: "사진 맞추기" });
-  async function chooseForFraming(target: ReturnType<typeof panel>) {
-    const chooser = page.waitForEvent("filechooser");
-    await target.click();
-    await (await chooser).setFiles(squareImage);
-    await expect(dialog).toBeVisible();
-  }
-  const left = panel(page, "hero-left");
-  await chooseForFraming(left);
-  await dialog.getByRole("button", { name: "이 사진 사용", exact: true }).click();
-  await expect(left).toHaveClass(/filled/);
-  const prior = await left.locator("img").getAttribute("src");
-  await chooseForFraming(left);
-  await dialog.getByRole("button", { name: "취소", exact: true }).click();
-  await expect(left.locator("img")).toHaveAttribute("src", prior!);
-
-  await chooseForFraming(panel(page, "hero-right"));
-  await dialog.getByRole("button", { name: "세로", exact: true }).click();
-  await dialog.getByRole("button", { name: "여백 넣기", exact: true }).click();
-  await page.screenshot({ path: "artifacts/screenshots/photo-framing-desktop.png", fullPage: true });
-  await dialog.getByRole("button", { name: "이 사진 사용", exact: true }).click();
-  await expect(panel(page, "hero-right")).toHaveClass(/filled/);
+  // Square and wider photos become landscape, taller ones portrait.
+  await chooseFile(page, panel(page, "hero-left"), squareImage);
+  await chooseFile(page, panel(page, "hero-right"), await makeImage(90, 200, "#3a8f5c", "tall.png"));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await makeLink(page);
   const { album: saved } = await (await request.get(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } })).json();
-  const cropped = await (await request.get(`/media/${album.id}/${saved.panels["hero-left"]}`)).body();
-  const padded = await (await request.get(`/media/${album.id}/${saved.panels["hero-right"]}`)).body();
-  expect(await sharp(cropped).metadata()).toMatchObject({ width: 1792, height: 1008 });
-  expect(await sharp(padded).metadata()).toMatchObject({ width: 1008, height: 1792 });
-  const { data, info } = await sharp(padded).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  expect(Array.from(data.subarray(0, 4))).toEqual([0, 0, 0, 255]);
-  expect(data[(Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * 4 + 3]).toBe(255);
+  const square = await (await request.get(`/media/${album.id}/${saved.panels["hero-left"]}`)).body();
+  const tall = await (await request.get(`/media/${album.id}/${saved.panels["hero-right"]}`)).body();
+  expect(await sharp(square).metadata()).toMatchObject({ width: 1792, height: 1008 });
+  expect(await sharp(tall).metadata()).toMatchObject({ width: 1008, height: 1792 });
+  // Cropping fills the frame; nothing is padded with black.
+  const { data } = await sharp(tall).raw().toBuffer({ resolveWithObject: true });
+  expect(Array.from(data.subarray(0, 3))).not.toEqual([0, 0, 0]);
   await request.delete(`/api/albums/${album.id}`, { headers: { Authorization: `Bearer ${editToken}` } });
 });
 
@@ -323,12 +317,11 @@ test("nickname changes mark the link stale until saved and reuse the existing PN
   expect(updated.pathname).toBe(original.pathname);
   expect(updated.searchParams.get("name")).toBe(name);
   expect(await (await request.get(updated.href)).body()).toEqual(originalBytes);
+  await copyButton(page).click();
   expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).searchParams.get("name")).toBe(name);
   await page.reload();
   await expect(nameField(page)).toHaveValue(name);
-  await page.getByRole("button", { name: "링크와 붙여넣는 방법 보기" }).click();
-  expect(new URL(await linkDialog(page).getByLabel("월드에 붙여넣을 링크").inputValue()).searchParams.get("name")).toBe(name);
-  await page.keyboard.press("Escape");
+  expect(new URL(await linkField(page).inputValue()).searchParams.get("name")).toBe(name);
   await nameField(page).fill("");
   expect(new URL(await makeLink(page)).searchParams.get("name")).toBe("");
 });
@@ -345,22 +338,21 @@ test("copies without Clipboard API and selects the link when copying is blocked"
   const { album, editToken } = await (await request.post("/api/albums")).json();
   await page.goto(`/edit/${album.id}#key=${editToken}`);
   await nameField(page).fill("멜비 ♡ 🎂");
-  await makeLinkButton(page).click();
-  const dialog = linkDialog(page);
-  await expect(dialog.getByRole("heading", { name: "링크를 복사했어요" })).toBeVisible();
-  const field = dialog.getByLabel("월드에 붙여넣을 링크");
-  const link = await field.inputValue();
+  const link = await makeLink(page);
+  await copyButton(page).click();
+  await expect(copyButton(page)).toHaveText("복사됨");
   expect(await page.evaluate(() => document.documentElement.dataset.copiedText)).toBe(link);
   await page.evaluate(() => { document.execCommand = () => false; });
-  await dialog.getByRole("button", { name: /^복사/ }).click();
+  await page.waitForTimeout(100);
+  await copyButton(page).click();
   await expect(page.getByRole("alert").filter({ hasText: "Ctrl+C" })).toBeVisible();
+  await expect(copyButton(page)).toHaveText("링크 복사");
+  const field = linkField(page);
   await expect(field).toBeFocused();
   expect(await field.evaluate((input: HTMLInputElement) => input.value.slice(input.selectionStart!, input.selectionEnd!))).toBe(link);
   expect(await page.locator("textarea").count()).toBe(0);
   await expectNoHorizontalOverflow(page);
-  const box = (await dialog.boundingBox())!;
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: "artifacts/screenshots/link-mobile.png", fullPage: true });
 });
 
 test("load accepts a world PNG URL with encoded nickname and preserves edit authorization", async ({ page, context, request }) => {
@@ -441,11 +433,9 @@ test("drop fills the targeted frame, and several dropped photos fill empty frame
   await expect(page.locator(".panel.filled")).toHaveCount(1);
   const firstPreview = await target.locator("img").getAttribute("src");
   await drop([squareImage]);
-  await expect(page.getByRole("dialog", { name: "사진 맞추기" })).toBeVisible();
-  await page.getByRole("button", { name: "취소", exact: true }).click();
-  await expect(target.locator("img")).toHaveAttribute("src", firstPreview!);
-  await drop([portraitImage]);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(target.locator("img")).not.toHaveAttribute("src", firstPreview!);
+  await drop([portraitImage]);
 
   await drop([landscapeImage, squareImage]);
   await expect(page.locator(".photo-notice")).toContainText("2장을 넣었어요");
@@ -455,7 +445,7 @@ test("drop fills the targeted frame, and several dropped photos fill empty frame
   expect(Object.entries(saved.album.panels).filter(([, photo]) => photo).map(([id]) => id).sort())
     .toEqual(["hero-left", "hero-right", "memory-right-1"]);
   expect(saved.album.panelOrientations["memory-right-1"]).toBe("portrait");
-  // Bulk photos with other ratios are center-cropped instead of asking.
+  // Other ratios are center-cropped instead of asking.
   expect(saved.album.panelOrientations["hero-right"]).toBe("landscape");
 });
 

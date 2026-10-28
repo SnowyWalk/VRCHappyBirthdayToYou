@@ -189,39 +189,57 @@ button:disabled { cursor: default; }
 .delete-button { color: var(--error); }
 .delete-button:hover { color: var(--error); background: var(--error-bg); }
 
-/* Action bar: step 3 is always reachable without scrolling. */
+/* Action bar: stands in for part 3 while its button is off screen. */
 .action-bar {
   position: fixed; z-index: 30; left: 0; right: 0; bottom: 0;
   padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(10px); box-shadow: 0 -6px 24px rgb(20 10 40 / 8%);
+  transition: transform .2s ease, visibility .2s;
 }
+.action-bar[data-hidden] { transform: translateY(110%); visibility: hidden; }
 .action-row { display: flex; align-items: center; gap: 12px; }
 .action-status { flex: 1; min-width: 0; margin: 0; font-size: 14px; color: var(--subtle); }
 .action-status.ready { color: var(--success); font-weight: 600; }
-.action-secondary { height: 52px; color: var(--foreground); }
 .primary-action { min-width: 220px; height: 54px; border-radius: 12px; font-size: 17px; font-weight: 700; }
 .primary-action svg { width: 20px; height: 20px; }
 .primary-action:hover:not(:disabled) { background: var(--primary-hover); }
 .primary-action[data-copied] { background: var(--success); }
 .primary-action[data-copied]:hover:not(:disabled) { background: var(--success); filter: brightness(1.08); }
-.action-error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 10px; padding: 10px 14px; border: 1px solid var(--error-border); border-radius: 10px; background: var(--error-bg); color: var(--error); font-size: 14px; }
+.action-error { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; border: 1px solid var(--error-border); border-radius: 10px; background: var(--error-bg); color: var(--error); font-size: 14px; }
 
-/* Link dialog */
-.link-dialog { width: min(560px, calc(100vw - 24px)); max-width: min(560px, calc(100vw - 24px)); grid-template-columns: minmax(0, 1fr); gap: 16px; }
-.link-dialog > * { min-width: 0; }
-.link-dialog [data-slot="dialog-title"] { font-size: 20px; }
-.link-dialog [data-slot="dialog-description"] { font-size: 14px; color: var(--foreground); }
-.url-field-guide { position: relative; aspect-ratio: 840 / 136; overflow: hidden; border-radius: 10px; background: var(--wall); container-type: inline-size; }
-.url-field-highlight { position: absolute; left: 2.4%; top: 42%; width: 66%; height: 47%; border: 2px solid #8ae1ff; border-radius: 4px; box-shadow: 0 0 0 3px rgb(138 225 255 / 25%); }
-.url-field-callout { position: absolute; left: 4.6%; top: 65.5%; transform: translateY(-50%); padding: .2em .7em; border-radius: 6px; background: #8ae1ff; color: #0f1525; font-size: max(12px, 2.9cqw); font-weight: 700; white-space: nowrap; }
-.link-copy-row { display: flex; gap: 8px; }
-.link-copy-row input { flex: 1; min-width: 0; height: 48px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--field); color: var(--foreground); font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
-.link-copy-button { height: 48px; min-width: 104px; border-radius: 10px; font-size: 15px; font-weight: 700; }
-.link-copy-button[data-copied] { background: var(--success); }
-.link-copy-blocked { margin: -6px 0 0; font-size: 13px; color: var(--error); }
-.link-notes { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 13px; color: var(--subtle); }
-.link-done { height: 46px; color: var(--foreground); }
+/* Part 3: link and where it goes in the world */
+.link-card { scroll-margin-top: 12px; }
+.link-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: auto 1fr;
+  grid-template-areas: "actions guide" "help guide"; gap: 20px 28px; align-items: start;
+}
+.link-actions { grid-area: actions; display: grid; gap: 10px; justify-items: start; min-width: 0; }
+.link-help { grid-area: help; display: grid; gap: 14px; min-width: 0; }
+.board-guide { grid-area: guide; }
+.link-lead { margin: 0; font-size: 15px; }
+.link-lead.ready { color: var(--success); font-weight: 600; }
+.link-copy-row { display: flex; gap: 8px; width: 100%; }
+.link-copy-row input { flex: 1; min-width: 0; height: 54px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--field); color: var(--foreground); font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+.link-copy-button { min-width: 160px; }
+.link-copy-blocked { margin: 0; font-size: 13px; color: var(--error); }
+.paste-steps { display: grid; gap: 6px; margin: 0; padding-left: 22px; list-style: decimal; font-size: 14px; line-height: 1.5; }
+.paste-steps span { color: var(--subtle); }
+.link-notes { display: grid; gap: 4px; margin: 0; padding-left: 18px; list-style: disc; font-size: 13px; color: var(--subtle); }
+.board-guide { margin: 0; }
+.board-guide figcaption { margin-top: 6px; font-size: 12px; color: var(--subtle); text-align: center; }
+/* Positions are percentages of the 992×1096 board crop (artifacts/publish-images.mjs). */
+.board-image { position: relative; aspect-ratio: 992 / 1096; overflow: hidden; border-radius: 12px; background: var(--wall); container-type: inline-size; }
+.board-mark {
+  position: absolute; left: 8.8%; top: 54.6%; width: 75.7%; height: 7.3%;
+  border: 3px solid #8ae1ff; border-radius: 6px; box-shadow: 0 0 0 999px rgb(8 6 14 / 38%), 0 0 14px rgb(138 225 255 / 70%);
+}
+.board-tag {
+  position: absolute; top: 62.8%; padding: .25em .6em; border-radius: 6px; background: #8ae1ff; color: #0f1525;
+  font-size: max(12px, 4cqw); font-weight: 700; white-space: nowrap;
+}
+.board-tag.paste { left: 9.98%; }
+.board-tag.apply { left: 66.43%; }
 
 /* Load dialog */
 .load-form { display: grid; gap: 12px; }
@@ -236,6 +254,8 @@ button:disabled { cursor: default; }
 
 @media (max-width: 860px) {
   .name-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .link-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "actions" "guide" "help"; }
+  .board-guide { max-width: 420px; }
 }
 @media (max-width: 640px) {
   .studio-header, .studio, .action-bar-inner { padding-inline: 14px; }
@@ -257,9 +277,8 @@ button:disabled { cursor: default; }
   .action-row > .step { display: none; }
   .action-status { font-size: 14px; line-height: 1.4; }
   .action-status .status-extra { display: none; }
-  .link-dialog { padding: 20px 16px; }
-  .action-secondary { width: 48px; padding: 0; }
-  .action-secondary span { display: none; }
   .primary-action { min-width: 0; padding-inline: 22px; height: 52px; font-size: 16px; }
-  .link-copy-row input { font-size: 16px; }
+  .link-copy-row { flex-direction: column; }
+  .link-copy-row input { flex: none; font-size: 15px; }
+  .link-actions .primary-action { width: 100%; }
 }

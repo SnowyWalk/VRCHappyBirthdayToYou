@@ -1,19 +1,21 @@
 import { test, expect } from "@playwright/test";
 import sharp from "sharp";
 import { readFile } from "node:fs/promises";
-import { expectNoHorizontalOverflow, makeLink, makeLinkButton, nameField, panel } from "./helpers";
+import { actionBar, expectNoHorizontalOverflow, makeLink, nameField, panel } from "./helpers";
 
 test("everything needed is on one screen at desktop and phone sizes with light images", async ({ page, request }) => {
   await page.goto("/");
-  // Name, both walls and the link action fit a common laptop screen.
+  // Name, both walls and the link action (the bar while part 3 is below) fit a common laptop screen.
   await page.setViewportSize({ width: 1440, height: 1000 });
-  for (const target of [nameField(page), page.locator('[data-world-side="left"]'), makeLinkButton(page)]) {
+  const barButton = actionBar(page).getByRole("button", { name: "링크 만들기" });
+  await expect(barButton).toBeVisible();
+  for (const target of [nameField(page), page.locator('[data-world-side="left"]'), barButton]) {
     const box = (await target.boundingBox())!;
     expect(box.y + box.height).toBeLessThanOrEqual(1000);
   }
   const images = page.locator(".wall-canvas > img, .name-sign img");
   await expect.poll(() => images.evaluateAll((all: HTMLImageElement[]) => all.every((img) => img.complete && img.naturalWidth > 0))).toBe(true);
-  for (const src of await images.evaluateAll((all: HTMLImageElement[]) => all.map((img) => img.getAttribute("src")!))) {
+  for (const src of await page.locator(".wall-canvas > img, .name-sign img, .board-image img").evaluateAll((all: HTMLImageElement[]) => all.map((img) => img.getAttribute("src")!))) {
     expect((await (await request.get(src)).body()).length).toBeLessThan(200 * 1024);
   }
   await page.screenshot({ path: "artifacts/screenshots/studio-empty-desktop.png", fullPage: true });
@@ -21,7 +23,8 @@ test("everything needed is on one screen at desktop and phone sizes with light i
   await page.setViewportSize({ width: 360, height: 780 });
   await expectNoHorizontalOverflow(page);
   await expect(page.locator(".slot")).toHaveCount(8);
-  const bar = (await makeLinkButton(page).boundingBox())!;
+  await expect(barButton).toBeVisible();
+  const bar = (await barButton.boundingBox())!;
   expect(bar.y + bar.height).toBeLessThanOrEqual(780);
   // Zoomed walls keep every frame inside the screen.
   for (const id of ["memory-left-2", "hero-left", "hero-right", "memory-right-2"]) {

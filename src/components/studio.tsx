@@ -2,17 +2,17 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Copy, FolderOpen, Images, Link2, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import Image from "next/image";
+import { Check, Copy, FolderOpen, Images, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WorldScene } from "@/components/world-scene";
 import { NameSign } from "@/components/name-sign";
-import { LinkDialog } from "@/components/link-dialog";
 import { LoadDialog } from "@/components/load-dialog";
-import { PhotoFramingDialog } from "@/components/photo-framing-dialog";
 import { PANELS, type Album, type PanelId } from "@/lib/panels";
-import { preparePhoto, PhotoRatioError, type PhotoFramingOptions } from "@/lib/prepare-photo";
+import { preparePhoto } from "@/lib/prepare-photo";
+import assets from "@/lib/assets.json";
 import {
   copyText,
   deleteSavedAlbum,
@@ -45,9 +45,11 @@ function hoursLeft(expiresAt: string | undefined, now: number) {
 }
 
 /**
- * The whole flow on one screen: name, photos, then the link in a bar that is
- * always visible. Without `albumId` the page is a fresh draft; the album is
- * created on the first save and the address switches to its edit link.
+ * The whole flow on one screen: name, photos, then the link with the world's
+ * settings board showing where it goes. While the link part is off screen a
+ * bar at the bottom offers the same action. Without `albumId` the page is a
+ * fresh draft; the album is created on the first save and the address
+ * switches to its edit link.
  */
 export function Studio({ albumId }: { albumId?: string }) {
   const router = useRouter();
@@ -70,16 +72,15 @@ export function Studio({ albumId }: { albumId?: string }) {
   const [checkingPhoto, setCheckingPhoto] = useState(false);
   const [progress, setProgress] = useState("");
   const [photoError, setPhotoError] = useState<{ panel: PanelId; message: string } | null>(null);
-  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; panel: PanelId } | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [conflict, setConflict] = useState(false);
 
   const [dataUrl, setDataUrl] = useState("");
-  const [linkOpen, setLinkOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyBlocked, setCopyBlocked] = useState(false);
   const [loadOpen, setLoadOpen] = useState(false);
+  const [barVisible, setBarVisible] = useState(true);
 
   const nameInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -87,6 +88,10 @@ export function Studio({ albumId }: { albumId?: string }) {
   const uploadPanel = useRef<PanelId>("hero-left");
   const objectUrls = useRef(new Set<string>());
   const choosingPhoto = useRef(false);
+  const linkSection = useRef<HTMLElement>(null);
+  const linkActions = useRef<HTMLDivElement>(null);
+  const linkField = useRef<HTMLInputElement>(null);
+  const copiedTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!albumId) return;
@@ -134,8 +139,23 @@ export function Studio({ albumId }: { albumId?: string }) {
 
   useEffect(() => {
     const urls = objectUrls.current;
-    return () => { for (const url of urls) URL.revokeObjectURL(url); };
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+      window.clearTimeout(copiedTimer.current);
+    };
   }, []);
+
+  // The bottom bar only stands in for part 3 while its button is off screen.
+  useEffect(() => {
+    const target = linkActions.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setBarVisible(!entry.isIntersecting),
+      { rootMargin: "0px 0px -24px 0px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loading, album]);
 
   useEffect(() => {
     function warn(event: BeforeUnloadEvent) { if (dirty) event.preventDefault(); }
@@ -158,7 +178,13 @@ export function Studio({ albumId }: { albumId?: string }) {
   function markChanged() {
     setDirty(true);
     setCopied(false);
+    setCopyBlocked(false);
     setError("");
+  }
+
+  function showLinkSection() {
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    linkSection.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
   }
 
   function revoke(url: string | undefined) {
@@ -182,29 +208,22 @@ export function Studio({ albumId }: { albumId?: string }) {
     setRemoved((prev) => prev.filter((id) => id !== panel));
   }
 
-  async function choose(file: File | undefined, panel: PanelId, framing?: PhotoFramingOptions) {
+  async function choose(file: File | undefined, panel: PanelId) {
     if (!file || busy || choosingPhoto.current) return;
     choosingPhoto.current = true;
     setBusy(true);
     setCheckingPhoto(true);
     setNotice("");
     try {
-      const prepared = await preparePhoto(file, framing);
+      const prepared = await preparePhoto(file);
       applyPhoto(panel, prepared.file);
       setPhotoError(null);
-      setPendingPhoto(null);
       markChanged();
     } catch (e) {
-      if (e instanceof PhotoRatioError) {
-        setPendingPhoto({ file, panel });
-        setPhotoError(null);
-      } else {
-        setPendingPhoto(null);
-        setPhotoError({
-          panel,
-          message: e instanceof Error && e.name !== "EncodingError" ? e.message : "사진을 읽지 못했어요.",
-        });
-      }
+      setPhotoError({
+        panel,
+        message: e instanceof Error && e.name !== "EncodingError" ? e.message : "사진을 읽지 못했어요.",
+      });
     } finally {
       setBusy(false);
       setCheckingPhoto(false);
@@ -212,7 +231,7 @@ export function Studio({ albumId }: { albumId?: string }) {
     }
   }
 
-  /** Fills empty frames in panel order; other ratios are center-cropped instead of asking. */
+  /** Fills empty frames in panel order. */
   async function addMany(list: File[]) {
     if (!list.length || busy || choosingPhoto.current) return;
     const empty = PANELS.map((p) => p.id).filter((id) => !photos[id]);
@@ -231,17 +250,7 @@ export function Studio({ albumId }: { albumId?: string }) {
     for (const [index, file] of batch.entries()) {
       setProgress(batch.length > 1 ? ` ${index + 1}/${batch.length}` : "");
       try {
-        let prepared;
-        try {
-          prepared = await preparePhoto(file);
-        } catch (e) {
-          if (!(e instanceof PhotoRatioError)) throw e;
-          prepared = await preparePhoto(file, {
-            orientation: e.width >= e.height ? "landscape" : "portrait",
-            mode: "crop",
-            position: 0.5,
-          });
-        }
+        const prepared = await preparePhoto(file);
         applyPhoto(empty[added], prepared.file);
         added++;
       } catch {
@@ -272,20 +281,18 @@ export function Studio({ albumId }: { albumId?: string }) {
   }
 
   async function copy() {
+    window.clearTimeout(copiedTimer.current);
     try {
       await copyText(worldUrl);
-      setCopied(true);
       setCopyBlocked(false);
+      setCopied(true);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 2500);
     } catch {
+      // Select the link for a manual Ctrl+C.
       setCopied(false);
       setCopyBlocked(true);
-      setLinkOpen(true);
-      // Select the link for a manual Ctrl+C, also when the dialog is already open.
-      requestAnimationFrame(() => {
-        const field = document.getElementById("world-url") as HTMLInputElement | null;
-        field?.focus();
-        field?.select();
-      });
+      showLinkSection();
+      requestAnimationFrame(() => { linkField.current?.focus({ preventScroll: true }); linkField.current?.select(); });
     }
   }
 
@@ -302,6 +309,9 @@ export function Studio({ albumId }: { albumId?: string }) {
     }
     setBusy(true);
     setError("");
+    setCopied(false);
+    setCopyBlocked(false);
+    showLinkSection();
     try {
       let current = album;
       let key = token;
@@ -337,18 +347,8 @@ export function Studio({ albumId }: { albumId?: string }) {
       setDirty(false);
       setConflict(false);
       setNow(Date.now());
-
-      // The save click is the user's intent to get the link, so copy it right away.
-      const url = withNickname(saved.dataUrl ?? "", saved.album.nickname);
-      try {
-        await copyText(url);
-        setCopied(true);
-        setCopyBlocked(false);
-      } catch {
-        setCopied(false);
-        setCopyBlocked(true);
-      }
-      setLinkOpen(true);
+      // Copying stays a separate, visible step so "복사됨" always means the user just copied.
+      requestAnimationFrame(() => document.getElementById("copy-link")?.focus({ preventScroll: true }));
     } catch (e) {
       setConflict(e instanceof ResponseError && e.status === 409);
       setError((e as Error).message);
@@ -379,7 +379,7 @@ export function Studio({ albumId }: { albumId?: string }) {
       setDirty(false);
       router.replace("/");
     } catch (e) {
-      setError((e as Error).message);
+      window.alert((e as Error).message);
       setBusy(false);
     }
   }
@@ -391,7 +391,7 @@ export function Studio({ albumId }: { albumId?: string }) {
       if (key) await deleteSavedAlbum(entry.id, key);
       setRecent(readRecentAlbums());
     } catch (e) {
-      setError((e as Error).message);
+      window.alert((e as Error).message);
     }
   }
 
@@ -513,7 +513,7 @@ export function Studio({ albumId }: { albumId?: string }) {
           <div className="photo-intro">
             <p className="hint">
               액자를 눌러 사진을 넣으세요. 원하는 칸만 채워도 돼요.
-              <span> 가로·세로 사진 모두 넣을 수 있어요.</span>
+              <span> 가로·세로 모두 되고, 비율이 다르면 가운데를 잘라 넣어요.</span>
             </p>
             <Button variant="outline" className="add-many" disabled={busy} onClick={() => {
                 if (photoCount === PANELS.length) setNotice("빈 액자가 없어요. 바꿀 액자를 눌러 한 장씩 골라 주세요.");
@@ -536,6 +536,83 @@ export function Studio({ albumId }: { albumId?: string }) {
           />
         </section>
 
+        <section className="card link-card" ref={linkSection} aria-labelledby="link-heading">
+          <div className="card-head">
+            <span className="step" aria-hidden="true">3</span>
+            <h2 id="link-heading">링크 복사해서 월드에 붙여넣기</h2>
+          </div>
+          <div className="link-layout">
+            <div className="link-actions" ref={linkActions}>
+              {ready ? (
+                <>
+                  <p className="link-lead ready">링크가 만들어졌어요 · {hoursLeft(album?.expiresAt, now)}</p>
+                  <div className="link-copy-row">
+                    <label className="sr-only" htmlFor="world-url">월드에 붙여넣을 링크</label>
+                    <input
+                      ref={linkField}
+                      id="world-url"
+                      readOnly
+                      value={worldUrl}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <Button id="copy-link" size="lg" className="primary-action link-copy-button"
+                      data-copied={copied || undefined} onClick={copy}>
+                      {copied ? <Check /> : <Copy />}
+                      {copied ? "복사됨" : "링크 복사"}
+                    </Button>
+                  </div>
+                  <p className="sr-only" role="status">{copied ? "링크를 복사했어요." : ""}</p>
+                  {copyBlocked && (
+                    <p className="link-copy-blocked" role="alert">
+                      브라우저가 복사를 막았어요. 선택된 링크를 Ctrl+C(맥은 ⌘C)로 복사해 주세요.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="link-lead">
+                    {dataUrl
+                      ? "이름이나 사진이 바뀌었어요. 새 링크를 만들어 월드에 다시 붙여넣어 주세요."
+                      : "이름과 사진을 다 정했으면 링크를 만드세요."}
+                  </p>
+                  <Button size="lg" className="primary-action" disabled={busy} onClick={save}>
+                    {busy && !checkingPhoto && <LoaderCircle className="spin" />}
+                    {busy && !checkingPhoto ? "링크 만드는 중…" : dataUrl ? "새 링크 만들기" : "링크 만들기"}
+                  </Button>
+                </>
+              )}
+              {error && (
+                <div className="action-error" role="alert">
+                  <span>{error}</span>
+                  {conflict && <Button size="sm" variant="outline" onClick={reloadSaved}>최신 내용 불러오기</Button>}
+                </div>
+              )}
+            </div>
+            <div className="link-help">
+              <ol className="paste-steps">
+                <li>월드에서 <strong>생일 사진 설정</strong> 판을 찾아가세요.</li>
+                <li><strong>아틀라스 이미지 URL</strong> 칸을 누르고 링크를 붙여넣으세요. <span>(PC는 Ctrl+V)</span></li>
+                <li><strong>적용</strong>을 누르면 사진과 이름이 월드에 나타나요.</li>
+              </ol>
+              <ul className="link-notes">
+                <li>링크는 만든 뒤 24시간 동안 쓸 수 있어요.</li>
+                <li>이름이나 사진을 바꾸면 새 링크를 만들어 다시 붙여넣어야 해요.</li>
+                <li>사진이 안 나오면 VRChat 설정에서 Allow Untrusted URLs를 켜 주세요.</li>
+              </ul>
+            </div>
+            <figure className="board-guide">
+              <div className="board-image">
+                <Image src={assets.settingsBoard} alt="월드의 생일 사진 설정 판. 아틀라스 이미지 URL 칸과 적용 버튼이 표시되어 있어요."
+                  fill unoptimized sizes="(max-width: 860px) 100vw, 360px" />
+                <span className="board-mark" aria-hidden="true" />
+                <span className="board-tag paste" aria-hidden="true">① 여기에 붙여넣기</span>
+                <span className="board-tag apply" aria-hidden="true">② 적용</span>
+              </div>
+              <figcaption>월드 안의 생일 사진 설정 판</figcaption>
+            </figure>
+          </div>
+        </section>
+
         {album && album.revision > 0 && (
           <div className="studio-footer">
             <Button variant="ghost" className="delete-button" onClick={deleteAlbum} disabled={busy}>
@@ -545,28 +622,17 @@ export function Studio({ albumId }: { albumId?: string }) {
         )}
       </main>
 
-      <div className="action-bar">
+      <div className="action-bar" data-hidden={barVisible ? undefined : true} aria-hidden={!barVisible}>
         <div className="action-bar-inner">
-          {error && (
-            <div className="action-error" role="alert">
-              <span>{error}</span>
-              {conflict && <Button size="sm" variant="outline" onClick={reloadSaved}>최신 내용 불러오기</Button>}
-            </div>
-          )}
           <div className="action-row">
             <span className="step" aria-hidden="true">3</span>
             <p className={`action-status ${ready ? "ready" : ""}`} role="status">{status}</p>
-            {ready && (
-              <Button variant="ghost" className="action-secondary" aria-label="링크와 붙여넣는 방법 보기"
-                onClick={() => { setCopyBlocked(false); setLinkOpen(true); }}>
-                <Link2 /><span>링크 보기</span>
-              </Button>
-            )}
             <Button
               size="lg"
               className="primary-action"
               data-copied={ready && copied ? true : undefined}
               disabled={busy}
+              tabIndex={barVisible ? undefined : -1}
               onClick={ready ? copy : save}
             >
               {busy && !checkingPhoto ? <LoaderCircle className="spin" /> : ready ? (copied ? <Check /> : <Copy />) : null}
@@ -594,22 +660,6 @@ export function Studio({ albumId }: { albumId?: string }) {
         tabIndex={-1}
         aria-hidden="true"
         onChange={(e) => { void addMany(Array.from(e.target.files ?? [])); e.target.value = ""; }}
-      />
-      {pendingPhoto && (
-        <PhotoFramingDialog
-          file={pendingPhoto.file}
-          busy={busy}
-          onCancel={() => setPendingPhoto(null)}
-          onConfirm={(options) => void choose(pendingPhoto.file, pendingPhoto.panel, options)}
-        />
-      )}
-      <LinkDialog
-        open={linkOpen}
-        url={worldUrl}
-        copied={copied}
-        copyBlocked={copyBlocked}
-        onCopy={copy}
-        onOpenChange={setLinkOpen}
       />
       <LoadDialog open={loadOpen} onOpenChange={setLoadOpen} />
     </div>
