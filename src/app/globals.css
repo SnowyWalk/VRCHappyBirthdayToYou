@@ -214,7 +214,8 @@ button:disabled { cursor: default; }
   grid-template-areas: "actions guide" "help guide"; gap: 20px 28px; align-items: start;
 }
 .link-actions { grid-area: actions; display: grid; gap: 10px; justify-items: start; min-width: 0; }
-.link-help { grid-area: help; display: grid; gap: 14px; min-width: 0; }
+/* Steps stay under the link; the notes settle at the bottom, level with the board guide. */
+.link-help { grid-area: help; align-self: stretch; display: grid; align-content: space-between; gap: 14px; min-width: 0; }
 .board-guide { grid-area: guide; }
 .link-lead { margin: 0; font-size: 15px; }
 .link-lead.ready { color: var(--success); font-weight: 600; }
