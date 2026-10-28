@@ -46,7 +46,7 @@ test("recent links restore legacy tokens, retain the latest five and recover tok
   await page.getByLabel("월드에 붙여넣었던 링크").fill(url);
   await page.getByRole("dialog").getByRole("button", { name: "불러오기" }).click();
   await expect(nameField(page)).toHaveValue("수정 완료");
-  await page.getByRole("button", { name: "사진 4 빼기", exact: true }).click();
+  await page.getByRole("button", { name: "사진 1 빼기", exact: true }).click();
   await makeLink(page);
   await page.goto("/");
   await expect(links.first()).toContainText("사진 0장");

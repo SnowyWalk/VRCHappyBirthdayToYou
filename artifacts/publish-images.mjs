@@ -12,13 +12,25 @@ async function publish(name, buffer) {
   return file;
 }
 
-// Wall captures: 4800×1200 sources shown at most ~1100px wide, so 2400px covers 2× screens.
-const view = JSON.parse(await fs.readFile('src/lib/world-view.json', 'utf8'));
-for (const wall of view.views) {
-  wall.image = await publish(`wall-${wall.side}`,
-    await sharp(`artifacts/source/wall-${wall.side}-4800.webp`).resize(2400, 600).webp({ quality: 80 }).toBuffer());
-}
-await fs.writeFile('src/lib/world-view.json', JSON.stringify(view, null, 2) + '\n');
+// The plaza seen from above (artifacts/world-top.json: orthographic, 65° down,
+// facing the stage), cropped to the stage and the eight frames. The page lays
+// photo cards over each frame's projected center at the frames' real size.
+const top = JSON.parse(await fs.readFile('artifacts/world-top.json', 'utf8'));
+const crop = { left: 60, top: 450, width: 2280, height: 1560 };
+const worldImage = await publish('world-map', await sharp('artifacts/source/world-top.webp')
+  .extract(crop).resize(1600).webp({ quality: 80 }).toBuffer());
+const round = (v) => Math.round(v * 10) / 10;
+await fs.writeFile('src/lib/world-view.json', JSON.stringify({
+  image: worldImage,
+  width: crop.width,
+  height: crop.height,
+  card: { width: round(top.frameMeters.width * top.pixelsPerMeter), height: round(top.frameMeters.width * top.pixelsPerMeter * 9 / 16) },
+  panels: top.panels.map(({ name, corners }) => ({
+    name,
+    x: round(corners.reduce((sum, c) => sum + c.x, 0) / 4 - crop.left),
+    y: round(corners.reduce((sum, c) => sum + c.y, 0) / 4 - crop.top),
+  })),
+}, null, 2) + '\n');
 
 // Stage board seen from the front, with the "YOUR NAME" placeholder painted in
 // the board colour so the page can draw the typed name in its place.

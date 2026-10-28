@@ -11,6 +11,7 @@ import { WorldScene } from "@/components/world-scene";
 import { NameSign } from "@/components/name-sign";
 import { LoadDialog } from "@/components/load-dialog";
 import { PANELS, type Album, type PanelId } from "@/lib/panels";
+import { PANEL_ORDER } from "@/lib/world-view";
 import { preparePhoto } from "@/lib/prepare-photo";
 import assets from "@/lib/assets.json";
 import {
@@ -92,6 +93,7 @@ export function Studio({ albumId }: { albumId?: string }) {
   const linkActions = useRef<HTMLDivElement>(null);
   const linkField = useRef<HTMLInputElement>(null);
   const copiedTimer = useRef<number | undefined>(undefined);
+  const focusCopyAfterSave = useRef(false);
 
   useEffect(() => {
     if (!albumId) return;
@@ -175,6 +177,13 @@ export function Studio({ albumId }: { albumId?: string }) {
   const worldUrl = withNickname(dataUrl, album?.nickname ?? "");
   const ready = Boolean(dataUrl) && !dirty;
 
+  // After a save, hand focus to "링크 복사" once it is rendered.
+  useEffect(() => {
+    if (!ready || !focusCopyAfterSave.current) return;
+    focusCopyAfterSave.current = false;
+    document.getElementById("copy-link")?.focus({ preventScroll: true });
+  }, [ready, album?.revision]);
+
   function markChanged() {
     setDirty(true);
     setCopied(false);
@@ -231,10 +240,10 @@ export function Studio({ albumId }: { albumId?: string }) {
     }
   }
 
-  /** Fills empty frames in panel order. */
+  /** Fills empty frames in their numbered order (nearest the stage first). */
   async function addMany(list: File[]) {
     if (!list.length || busy || choosingPhoto.current) return;
-    const empty = PANELS.map((p) => p.id).filter((id) => !photos[id]);
+    const empty = PANEL_ORDER.filter((id) => !photos[id]);
     if (!empty.length) {
       setNotice("빈 액자가 없어요. 바꿀 액자를 눌러 한 장씩 골라 주세요.");
       return;
@@ -348,7 +357,7 @@ export function Studio({ albumId }: { albumId?: string }) {
       setConflict(false);
       setNow(Date.now());
       // Copying stays a separate, visible step so "복사됨" always means the user just copied.
-      requestAnimationFrame(() => document.getElementById("copy-link")?.focus({ preventScroll: true }));
+      focusCopyAfterSave.current = true;
     } catch (e) {
       setConflict(e instanceof ResponseError && e.status === 409);
       setError((e as Error).message);
@@ -512,7 +521,7 @@ export function Studio({ albumId }: { albumId?: string }) {
           </div>
           <div className="photo-intro">
             <p className="hint">
-              액자를 눌러 사진을 넣으세요. 원하는 칸만 채워도 돼요.
+              위에서 본 월드예요. 액자를 눌러 사진을 넣으세요. 여러 장은 1번부터 순서대로 들어가요.
               <span> 가로·세로 모두 되고, 비율이 다르면 가운데를 잘라 넣어요.</span>
             </p>
             <Button variant="outline" className="add-many" disabled={busy} onClick={() => {

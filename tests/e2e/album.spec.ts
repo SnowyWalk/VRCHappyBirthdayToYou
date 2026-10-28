@@ -227,8 +227,8 @@ test("create, save repeatedly, copy and load from another page", async ({ page, 
   await expect(nameField(page)).toHaveValue("멜비의 생일");
   expect(page.url()).toContain(id);
   await expect(copyButton(page)).toHaveText("링크 복사");
-  // Hero-left is the fourth frame from the left on the left wall.
-  await page.getByRole("button", { name: "사진 4 빼기" }).click();
+  // Hero-left is number 1: the left frame nearest the stage.
+  await page.getByRole("button", { name: "사진 1 빼기" }).click();
   await makeLink(page);
   expect((await (await request.get(`/data/${id}`)).json()).panels).toHaveLength(1);
 
@@ -255,13 +255,13 @@ test("keyboard panel selection and mobile numbered slots target the chosen frame
   expect(manifest.panels.map((p: { objectName: string }) => p.objectName)).toEqual(["Memory -1 0"]);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  // Left wall, left to right: Memory -1 2, Memory -1 1, Memory -1 0, Hero portrait -1.
-  await chooseFile(page, page.getByRole("button", { name: "사진 2 넣기", exact: true }), portraitImage);
+  // Numbers go in pairs away from the stage, left then right: Memory -1 1 is 5.
+  await chooseFile(page, page.getByRole("button", { name: "사진 5 넣기", exact: true }), portraitImage);
   await makeLink(page);
   manifest = await (await request.get(`/data/${album.id}`)).json();
   expect(manifest.panels.map((p: { objectName: string }) => p.objectName)).toEqual(["Memory -1 0", "Memory -1 1"]);
 
-  await page.locator(".slot-row").getByRole("button", { name: "사진 3 빼기", exact: true }).click();
+  await page.locator(".slot-grid").getByRole("button", { name: "사진 3 빼기", exact: true }).click();
   await makeLink(page);
   manifest = await (await request.get(`/data/${album.id}`)).json();
   expect(manifest.panels.map((p: { objectName: string }) => p.objectName)).toEqual(["Memory -1 1"]);

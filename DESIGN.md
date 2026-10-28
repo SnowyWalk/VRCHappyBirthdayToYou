@@ -2,7 +2,7 @@
 
 ## Source of truth
 - Status: Active; last refreshed: 2026-10-28 (single-screen redesign).
-- Surfaces: `src/components/studio.tsx` (whole flow), `world-scene.tsx` (walls), `name-sign.tsx`, `load-dialog.tsx`, `src/app/globals.css`. Browser checks: `tests/e2e/*.spec.ts`.
+- Surfaces: `src/components/studio.tsx` (whole flow), `world-scene.tsx` (world map), `name-sign.tsx`, `load-dialog.tsx`, `src/app/globals.css`. Browser checks: `tests/e2e/*.spec.ts`.
 
 ## Who arrives and why
 - Visitors come from the Birthday World, where the settings board tells them to open this site. They already know the goal: set a name and photos, then paste a link back into the world.
@@ -16,7 +16,7 @@
 
 ## Flow
 1. Name: one large input. Next to it, the world's stage board renders the typed name live where "YOUR NAME" sits in the world. An empty name leaves the board blank, as in the world. Validation (control characters, 128 UTF-8 bytes) runs on save and focuses the field.
-2. Photos: the two real wall captures with the eight frames at their measured positions. Clicking a frame opens the file picker; dropping one photo fills that frame. There is no photo editing: other ratios are center-cropped without asking (wider-or-square → landscape, taller → portrait). "여러 장 한 번에 넣기" (or dropping several photos) fills empty frames in panel order (hero-left, hero-right, then gallery), then reports how many went in.
+2. Photos: one map of the plaza seen from above, with a card on each of the eight frames. Clicking a frame opens the file picker; dropping one photo fills that frame. There is no photo editing: other ratios are center-cropped without asking (wider-or-square → landscape, taller → portrait). "여러 장 한 번에 넣기" (or dropping several photos) fills empty frames in number order, then reports how many went in.
 3. Link: part 3 sits in the page, not in a dialog. It holds one action area, the world's whole settings board (so visitors recognise it in VRChat) with the URL field and 적용 button marked, the three in-world steps and short notes (24-hour validity, edits need a new link, Allow Untrusted URLs).
    - not saved / changed → "링크 만들기" / "새 링크 만들기" (the old link is hidden while stale);
    - saved and unchanged → the link field and "링크 복사".
@@ -25,17 +25,19 @@
 - Any edit after saving marks the link stale ("바뀐 내용이 있어요") and the primary action becomes "새 링크 만들기", so an outdated link cannot be copied by mistake.
 - On `/`, links made in this browser appear above the editor ("이 브라우저에서 만든 링크") with name, photo count and age; one click resumes, a trash button deletes. Header: "불러오기" (paste a world PNG link or edit link) on a fresh draft, "새로 만들기" once an album exists. Saved albums can be deleted at the page bottom ("사진과 링크 삭제").
 
-## Walls
-- Never rearrange the frames into a grid: the photo must be placed where it hangs in the world. Frames follow the projected Unity texture corners (`src/lib/world-view.json`, `panelTransform`).
-- Wide containers (≥720px) show each full wall capture with the HAPPY BIRTHDAY landmark; filled frames get a "빼기" button below.
-- Narrow containers zoom into the frames' region and number them 1–8 (left wall 1–4, right wall 5–8, left to right on screen), with a row of large numbered slot buttons below each wall. Slots are the accessible controls there; the zoomed frames stay clickable but are hidden from assistive tech.
+## World map
+- The frames ring the plaza and face its center, so no single perspective shot shows all eight from the front, and two separate wall shots repeated the stage and hid how the walls relate. The editor therefore shows one orthographic Unity render of the plaza from above (65° down, stage at the top) and lays an upright photo card over each frame's projected center at the frame's real size (3.6 m wide; portrait photos turn the card upright at 3.45 m tall, as the world does). Geometry: `artifacts/world-top.json` → `src/lib/world-view.json`.
+- Never rearrange the frames into an abstract grid: each card sits where its frame hangs.
+- Numbers read like the map, row by row from the stage: 1·2 are the frames beside the stage (left, right), then 3·4, 5·6, 7·8 towards the entrance. The number is always on the card, and "여러 장 한 번에 넣기" fills empty frames in exactly this order (`PANEL_ORDER`), so where photos land is predictable.
+- Filled cards get a round × (빼기) at their top-right corner.
+- Narrow containers (<640px) keep the map as a guide (cards not focusable) and add a two-column grid of large numbered slots below it: odd numbers left, even right, the same layout as the map.
 
 ## Visual language
 - Neutral surfaces in light and dark themes (system default, header toggle remembered). Blue primary action, green when copied. World images keep their own night palette in both themes.
 - Steps are marked by small numbered circles, not by navigation. Copy is short, practical Korean.
 
 ## Performance
-- Served images are lossy WebP made by `artifacts/publish-images.mjs` from `artifacts/source/`: walls 2400×600 (~100KB each), stage board ~30KB, settings board ~35KB (its in-world fields are repainted to match the live world). Filenames carry a content hash. Do not ship multi-megabyte captures.
+- Served images are lossy WebP made by `artifacts/publish-images.mjs` from `artifacts/source/`: world map 1600px (~50KB), stage board ~30KB, settings board ~35KB (its in-world fields are repainted to match the live world). Filenames carry a content hash. Do not ship multi-megabyte captures.
 
 ## Accessibility and responsive behavior
 - Native buttons and labels, visible focus, `role="status"` for the bar and bulk-add result, alerts for errors. Touch targets ≥44px. No horizontal page scroll at 360px; the action bar respects the safe area. Respect reduced motion.

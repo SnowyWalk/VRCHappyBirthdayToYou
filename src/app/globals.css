@@ -133,49 +133,48 @@ button:disabled { cursor: default; }
 .resume-delete { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--subtle); }
 .resume-delete:hover { background: var(--error-bg); color: var(--error); }
 
-/* Walls */
-.world-scene { display: grid; gap: 10px; }
-.wall { overflow: hidden; border-radius: 10px; background: var(--wall); }
-.wall-frame { position: relative; width: 100%; overflow: hidden; }
-.wall-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
-.wall-canvas > img { pointer-events: none; user-select: none; }
+/* World map: the plaza from above, with a card on each frame (map units, scaled to fit) */
+.world-scene { display: grid; gap: 10px; overflow: hidden; border-radius: 10px; background: var(--wall); }
+.map-frame { position: relative; width: 100%; max-width: 840px; margin-inline: auto; overflow: hidden; }
+.map-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.map-canvas > img { pointer-events: none; user-select: none; }
 .panel {
-  position: absolute; top: 0; left: 0; width: 200px; height: 112.5px; transform-origin: 0 0;
-  display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 0;
-  border: 4px dashed rgb(255 255 255 / 80%); background: rgb(18 22 40 / 55%); color: #fff;
-  transition: background .15s, border-color .15s;
+  position: absolute; display: flex; align-items: center; justify-content: center; overflow: visible; padding: 0;
+  border: 7px dashed rgb(255 255 255 / 85%); border-radius: 6px; background: rgb(18 22 40 / 70%); color: #fff;
+  box-shadow: 0 6px 28px rgb(0 0 0 / 55%); transition: background .15s, border-color .15s;
 }
-.panel .panel-plus { width: 46px; height: 46px; filter: drop-shadow(0 1px 3px #0008); }
-.wall[data-compact] .panel .panel-plus { display: none; }
-.panel:hover:not(:disabled), .panel.drop { border-style: solid; border-color: #fff; background: rgb(49 93 221 / 75%); }
-.panel.filled { border: 4px solid rgb(255 255 255 / 0%); background: #000; }
-.panel.filled:hover:not(:disabled) { border-color: #fff; background: #000; }
-.panel.filled > img { object-fit: contain; }
-.panel:focus-visible { outline: 6px solid #fff; outline-offset: 2px; }
+.panel .panel-plus { width: 34px; height: 34px; flex-shrink: 0; filter: drop-shadow(0 1px 3px #0008); }
+.world-scene[data-compact] .panel .panel-plus { display: none; }
+.panel:hover:not(:disabled), .panel.drop { border-style: solid; border-color: #fff; background: rgb(49 93 221 / 80%); }
+.panel.filled { border: 7px solid #f3e7c9; background: #000; }
+.panel.filled:hover:not(:disabled) { border-color: #8ab4ff; }
+.panel.filled > img { object-fit: cover; border-radius: 2px; }
+.panel:focus-visible { outline: 12px solid #8ab4ff; outline-offset: 4px; }
 .panel:disabled { opacity: .7; }
-.panel-badge {
-  position: absolute; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
-  background: #fff; color: #1c1726; font-size: 13px; font-weight: 800; pointer-events: none; box-shadow: 0 1px 4px #0009;
+.panel-number {
+  position: absolute; top: -4px; left: -4px; z-index: 1; display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: 50%; background: #fff; color: #1c1726; font-size: 14px; font-weight: 800; transform-origin: 0 0;
+  pointer-events: none; box-shadow: 0 1px 4px #0009;
 }
 .panel-remove {
-  position: absolute; display: inline-flex; align-items: center; gap: 3px; height: 30px; padding: 0 10px 0 8px;
-  border: 1px solid rgb(255 255 255 / 45%); border-radius: 999px; background: rgb(14 12 20 / 85%);
-  color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; transform-origin: top center;
+  position: absolute; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px; transform-origin: 0 0;
+  border: 2px solid var(--wall); border-radius: 50%; background: #e7e3ee; color: #1c1726; box-shadow: 0 1px 4px #0009;
 }
-.panel-remove:hover:not(:disabled) { background: #a3273f; border-color: #a3273f; }
-.slot-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 10px; list-style: none; }
-.slot-row li { position: relative; }
+.panel-remove:hover:not(:disabled) { background: #a3273f; color: #fff; }
+/* Same two columns as the map: odd numbers on the left wall, even on the right. */
+.slot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0 10px 12px; list-style: none; }
+.slot-grid li { position: relative; }
 .slot {
-  position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 11; overflow: hidden; padding: 0;
+  position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; padding: 0;
   border: 2px dashed rgb(255 255 255 / 55%); border-radius: 8px; background: rgb(255 255 255 / 6%); color: #fff;
 }
-.slot .panel-plus { width: 22px; height: 22px; opacity: .9; transform: translate(7px, 3px); }
+.slot .panel-plus { width: 26px; height: 26px; opacity: .9; }
 .slot.filled { border: 2px solid rgb(255 255 255 / 80%); background: #000; }
-.slot.filled > img { object-fit: cover; }
+.slot.filled > img { object-fit: contain; }
 .slot.drop, .slot:active:not(:disabled) { border-color: #fff; background: rgb(49 93 221 / 60%); }
 .slot-number {
-  position: absolute; top: 4px; left: 4px; display: grid; place-items: center; width: 20px; height: 20px;
-  border-radius: 50%; background: #fff; color: #1c1726; font-size: 12px; font-weight: 800;
+  position: absolute; top: 5px; left: 5px; display: grid; place-items: center; width: 24px; height: 24px;
+  border-radius: 50%; background: #fff; color: #1c1726; font-size: 13px; font-weight: 800;
 }
 .slot-remove {
   position: absolute; top: -8px; right: -8px; display: grid; place-items: center; width: 32px; height: 32px;
