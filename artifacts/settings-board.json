@@ -1,0 +1,41 @@
+{
+  "width": 900,
+  "height": 984,
+  "rects": [
+    {
+      "name": "Atlas image URL input",
+      "left": 120.7,
+      "right": 574.6,
+      "top": 515,
+      "bottom": 571.9
+    },
+    {
+      "name": "Atlas apply button",
+      "left": 585.3,
+      "right": 718.8,
+      "top": 515,
+      "bottom": 571.9
+    },
+    {
+      "name": "Atlas URL lock button",
+      "left": 727.7,
+      "right": 779.3,
+      "top": 515,
+      "bottom": 571.9
+    },
+    {
+      "name": "Atlas website field",
+      "left": 120.7,
+      "right": 779.3,
+      "top": 363.6,
+      "bottom": 411.7
+    },
+    {
+      "name": "Atlas status",
+      "left": 120.7,
+      "right": 779.3,
+      "top": 588,
+      "bottom": 623.5
+    }
+  ]
+}

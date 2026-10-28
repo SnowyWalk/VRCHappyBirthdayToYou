@@ -1,4 +1,22 @@
 {
   "stageSign": "/stage-sign-e437f837dcce.webp",
-  "settingsBoard": "/settings-board-a612ad5056d9.webp"
+  "settingsBoard": {
+    "image": "/settings-board-014c17654cb9.webp",
+    "width": 900,
+    "height": 984,
+    "mark": {
+      "left": 12.7,
+      "top": 51.7,
+      "width": 67.8,
+      "height": 7
+    },
+    "pasteTag": {
+      "left": 13.4,
+      "top": 59.7
+    },
+    "applyTag": {
+      "left": 65,
+      "top": 59.7
+    }
+  }
 }

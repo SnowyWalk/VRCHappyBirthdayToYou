@@ -28,6 +28,15 @@ import {
   type RecentAlbum,
 } from "@/lib/client";
 
+// The in-world settings board, with its URL field and apply button measured in
+// percentages of the image (artifacts/publish-images.mjs).
+const board = assets.settingsBoard;
+type Box = { left: number; top: number; width?: number; height?: number };
+function percentBox(box: Box): React.CSSProperties {
+  const pct = (v: number | undefined) => (v === undefined ? undefined : `${v}%`);
+  return { left: pct(box.left), top: pct(box.top), width: pct(box.width), height: pct(box.height) };
+}
+
 function validatedName(value: string) {
   if (/[\u0000-\u001f\u007f]/.test(value)) {
     throw new Error("이름에 줄바꿈이나 제어 문자는 쓸 수 없어요.");
@@ -610,12 +619,12 @@ export function Studio({ albumId }: { albumId?: string }) {
               </ul>
             </div>
             <figure className="board-guide">
-              <div className="board-image">
-                <Image src={assets.settingsBoard} alt="월드의 생일 사진 설정 판. 아틀라스 이미지 URL 칸과 적용 버튼이 표시되어 있어요."
+              <div className="board-image" style={{ aspectRatio: `${board.width} / ${board.height}` }}>
+                <Image src={board.image} alt="월드의 생일 사진 설정 판. 아틀라스 이미지 URL 칸과 적용 버튼이 표시되어 있어요."
                   fill unoptimized sizes="(max-width: 860px) 100vw, 360px" />
-                <span className="board-mark" aria-hidden="true" />
-                <span className="board-tag paste" aria-hidden="true">① 여기에 붙여넣기</span>
-                <span className="board-tag apply" aria-hidden="true">② 적용</span>
+                <span className="board-mark" aria-hidden="true" style={percentBox(board.mark)} />
+                <span className="board-tag" aria-hidden="true" style={percentBox(board.pasteTag)}>① 여기에 붙여넣기</span>
+                <span className="board-tag" aria-hidden="true" style={percentBox(board.applyTag)}>② 적용</span>
               </div>
               <figcaption>월드 안의 생일 사진 설정 판</figcaption>
             </figure>

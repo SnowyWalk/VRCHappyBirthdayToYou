@@ -41,21 +41,27 @@ const stageSign = await publish('stage-sign', await sharp('artifacts/source/over
   .composite([{ input: patch, left: 328, top: 253 }])
   .webp({ quality: 84 }).toBuffer());
 
-// The whole in-world settings board, so visitors recognise it in VRChat
-// (source: Birthday world/Captures/AtlasUrlLock_Kiosk.png). The capture was
-// taken before the website address was set, so paint the fields as the live
-// world shows them: the site address and the "paste the URL" status line.
-const live = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1280">
-  <rect x="138" y="776" width="560" height="40" fill="rgb(44,42,54)"/>
-  <text x="160" y="590" font-family="Noto Sans KR, Malgun Gothic" font-size="22" fill="rgb(222,219,230)">https://hbd.snowywalk.me/</text>
-  <text x="143" y="803" font-family="Noto Sans KR, Malgun Gothic" font-size="21" fill="rgb(255,212,145)">아틀라스 이미지 URL을 붙여넣으세요.</text>
-</svg>`;
-const painted = await sharp('artifacts/source/world-input-panel.webp')
-  .composite([{ input: Buffer.from(live) }]).png().toBuffer();
-// A little night sky stays around the board; the page places its highlights
-// in percentages of this 992×1096 crop.
-const settingsBoard = await publish('settings-board', await sharp(painted)
-  .extract({ left: 44, top: 92, width: 992, height: 1096 })
-  .resize(800).webp({ quality: 82 }).toBuffer());
+// The in-world settings board seen from the front (artifacts/source/settings-board.webp,
+// captured 2026-10-28 without post-processing so the thin gold lines stay gold).
+// artifacts/settings-board.json has the URL field and buttons in image pixels; the page
+// highlights them from the percentages written here.
+const boardCapture = JSON.parse(await fs.readFile('artifacts/settings-board.json', 'utf8'));
+const field = (name) => boardCapture.rects.find((r) => r.name === name);
+const pct = (v, total) => Math.round(v / total * 1000) / 10;
+const input = field('Atlas image URL input');
+const apply = field('Atlas apply button');
+const pad = 6;
+const tagTop = input.bottom + pad + 10;
+const settingsBoard = {
+  image: await publish('settings-board', await sharp('artifacts/source/settings-board.webp').webp({ quality: 84 }).toBuffer()),
+  width: boardCapture.width,
+  height: boardCapture.height,
+  mark: {
+    left: pct(input.left - pad, boardCapture.width), top: pct(input.top - pad, boardCapture.height),
+    width: pct(apply.right - input.left + pad * 2, boardCapture.width), height: pct(input.bottom - input.top + pad * 2, boardCapture.height),
+  },
+  pasteTag: { left: pct(input.left, boardCapture.width), top: pct(tagTop, boardCapture.height) },
+  applyTag: { left: pct(apply.left, boardCapture.width), top: pct(tagTop, boardCapture.height) },
+};
 
 await fs.writeFile('src/lib/assets.json', JSON.stringify({ stageSign, settingsBoard }, null, 2) + '\n');

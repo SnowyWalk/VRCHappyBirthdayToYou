@@ -39,7 +39,7 @@ npm start
 
 ### 이미지
 
-월드 지도는 `MidnightBirthday` 씬을 정사영 카메라(아래로 65°, 반높이 12.5m, 무대 방향)로 찍은 2400×2400 캡처(2026-10-28)입니다. 원본은 `artifacts/source/world-top.webp`, 액자 8개의 투영 좌표는 `artifacts/world-top.json`에 있습니다. `node artifacts/publish-images.mjs`가 `artifacts/source/`의 원본으로 사이트 이미지와 `src/lib/world-view.json` 좌표를 만듭니다: 월드 지도(1600px WebP, 약 50KB), 무대 간판(이름 자리를 지운 정면 캡처), 월드의 생일 사진 설정 판. 파일명에 내용 해시를 넣어 재촬영 뒤에도 캐시된 옛 이미지를 쓰지 않게 하고, 경로는 `src/lib/world-view.json`과 `src/lib/assets.json`에 기록됩니다.
+월드 지도는 `MidnightBirthday` 씬을 정사영 카메라(아래로 65°, 반높이 12.5m, 무대 방향)로 찍은 2400×2400 캡처(2026-10-28)입니다. 원본은 `artifacts/source/world-top.webp`, 액자 8개의 투영 좌표는 `artifacts/world-top.json`에 있습니다. `node artifacts/publish-images.mjs`가 `artifacts/source/`의 원본으로 사이트 이미지와 `src/lib/world-view.json` 좌표를 만듭니다: 월드 지도(1600px WebP, 약 50KB), 무대 간판(이름 자리를 지운 정면 캡처), 월드의 생일 사진 설정 판(2026-10-28 정면 캡처, 가는 금색 선이 번지지 않도록 후처리 없이 촬영). 설정 판의 URL 칸과 버튼 위치는 `artifacts/settings-board.json`에 있고, 페이지의 강조 상자와 안내 표시는 이 좌표로 위치를 정합니다. 파일명에 내용 해시를 넣어 재촬영 뒤에도 캐시된 옛 이미지를 쓰지 않게 하고, 경로는 `src/lib/world-view.json`과 `src/lib/assets.json`에 기록됩니다.
 
 ## BWAT v1
 

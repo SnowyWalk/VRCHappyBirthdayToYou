@@ -60,6 +60,15 @@ test("one screen: name, photos and link without creating an album before saving"
   await expect(guide).toBeVisible();
   await expect.poll(() => guide.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   await expect(linkCard(page)).toContainText("① 여기에 붙여넣기");
+  // The highlight sits on the board's URL row, positioned from the capture's measurements.
+  const boardBox = (await guide.boundingBox())!;
+  for (const part of await linkCard(page).locator(".board-mark, .board-tag").all()) {
+    const box = (await part.boundingBox())!;
+    expect(box.x).toBeGreaterThan(boardBox.x);
+    expect(box.x + box.width).toBeLessThan(boardBox.x + boardBox.width);
+    expect(box.y).toBeGreaterThan(boardBox.y + boardBox.height * 0.4);
+    expect(box.y + box.height).toBeLessThan(boardBox.y + boardBox.height * 0.75);
+  }
   await expect(linkCard(page)).toContainText("24시간");
   await page.screenshot({ path: "artifacts/screenshots/link-desktop.png" });
 
