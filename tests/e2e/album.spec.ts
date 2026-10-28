@@ -424,6 +424,8 @@ test("drop fills the targeted frame, and several dropped photos fill empty frame
       await expect(target).toHaveClass(/drop/);
       await target.dispatchEvent("drop", { dataTransfer: transfer });
       await expect(target).not.toHaveClass(/\bdrop\b/);
+      // Frames ignore drops while a photo is still being prepared.
+      await expect(status(page)).not.toContainText("사진 준비 중");
     } finally {
       await transfer.dispose();
     }
